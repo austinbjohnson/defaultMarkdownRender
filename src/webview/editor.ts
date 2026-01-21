@@ -123,7 +123,12 @@ function addRowBelow() {
 }
 
 function deleteRow() {
-  runCommand(callCommand(deleteSelectedCellsCommand.key));
+  // First select the current row, then delete selected cells
+  runCommand(callCommand(selectRowCommand.key, { index: -1 }));
+  // Small delay to ensure selection is applied before delete
+  setTimeout(() => {
+    runCommand(callCommand(deleteSelectedCellsCommand.key));
+  }, 10);
   hideContextMenu();
 }
 
