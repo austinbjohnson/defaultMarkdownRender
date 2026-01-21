@@ -1,0 +1,91 @@
+{
+  "name": "markdown-live-render",
+  "displayName": "Markdown Live Render",
+  "description": "WYSIWYG markdown editor with live sync for AI collaboration",
+  "version": "0.1.0",
+  "publisher": "ajohnson",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "markdownLiveRender.editor",
+        "displayName": "Markdown Live Render",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "Markdown Live Render",
+      "properties": {
+        "markdownLiveRender.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the live markdown renderer for this workspace"
+        }
+      }
+    },
+    "configurationDefaults": {
+      "workbench.editorAssociations": {
+        "*.md": "markdownLiveRender.editor"
+      }
+    },
+    "commands": [
+      {
+        "command": "markdownLiveRender.openWith",
+        "title": "Open with Markdown Live Render"
+      },
+      {
+        "command": "markdownLiveRender.openAsText",
+        "title": "Open Markdown as Raw Text"
+      },
+      {
+        "command": "markdownLiveRender.toggle",
+        "title": "Toggle Markdown Rendered/Raw View"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "markdownLiveRender.toggle",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m",
+        "when": "resourceExtname == .md"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.config.js",
+    "watch": "node esbuild.config.js --watch",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "esbuild": "^0.19.8",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2"
+  },
+  "dependencies": {
+    "@milkdown/core": "^7.3.6",
+    "@milkdown/ctx": "^7.3.6",
+    "@milkdown/preset-commonmark": "^7.3.6",
+    "@milkdown/preset-gfm": "^7.3.6",
+    "@milkdown/plugin-listener": "^7.3.6",
+    "@milkdown/theme-nord": "^7.3.6",
+    "@milkdown/utils": "^7.3.6",
+    "diff-match-patch": "^1.0.5"
+  }
+}
