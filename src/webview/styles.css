@@ -454,15 +454,42 @@ html, body {
   margin-bottom: 4px;
 }
 
-/* Task lists (GFM) */
-.milkdown li.task-list-item {
+/* Task lists (GFM)
+   Milkdown renders tasks as: li[data-item-type="task"][data-checked="true|false"]
+   (no <input> element), so we draw the checkbox via CSS. */
+.milkdown li[data-item-type="task"] {
   list-style: none;
   margin-left: -1.5em;
+  position: relative;
+  padding-left: 1.6em;
 }
 
-.milkdown input[type="checkbox"] {
-  margin-right: 8px;
-  cursor: pointer;
+.milkdown li[data-item-type="task"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  width: 1em;
+  height: 1em;
+  border: 1px solid var(--vscode-editorWidget-border, #454545);
+  border-radius: 3px;
+  background: transparent;
+}
+
+.milkdown li[data-item-type="task"][data-checked="true"]::before {
+  content: "✓";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--vscode-button-background, #0e639c);
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #ffffff);
+  font-size: 0.8em;
+  line-height: 1;
+}
+
+.milkdown li[data-item-type="task"][data-checked="true"] {
+  opacity: 0.85;
 }
 
 /* ==========================================================================

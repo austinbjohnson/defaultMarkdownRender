@@ -696,6 +696,45 @@ function setupToolbar() {
       showContextMenu(e.clientX, e.clientY);
     }
   });
+
+  // Toggle task list items when clicking the checkbox area.
+  // Milkdown renders task items as li[data-item-type="task"] with data-checked,
+  // so we detect clicks in the left gutter and flip the list_item.checked attr.
+  document.getElementById('editor')?.addEventListener('click', (e) => {
+    const evt = e as MouseEvent;
+    const target = evt.target as HTMLElement;
+    const taskItem = target.closest('li[data-item-type="task"]') as HTMLElement | null;
+    if (!taskItem || !editor) return;
+
+    const rect = taskItem.getBoundingClientRect();
+    const clickX = evt.clientX - rect.left;
+    // Only toggle when clicking near the checkbox area (left side)
+    if (clickX > 28) return;
+
+    evt.preventDefault();
+    evt.stopPropagation();
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const pos = view.posAtDOM(taskItem, 0);
+      const $pos = view.state.doc.resolve(pos);
+
+      let depth = $pos.depth;
+      while (depth > 0 && $pos.node(depth).type.name !== 'list_item') depth--;
+      if (depth === 0) return;
+
+      const node = $pos.node(depth);
+      if (node.attrs.checked == null) return;
+
+      const nodePos = $pos.before(depth);
+      const nextChecked = !node.attrs.checked;
+      const tr = view.state.tr.setNodeMarkup(nodePos, void 0, {
+        ...node.attrs,
+        checked: nextChecked,
+      });
+      view.dispatch(tr);
+    });
+  });
 }
 
 // Setup keyboard shortcuts

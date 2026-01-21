@@ -43,5 +43,3 @@ Spring awakens slow
 
 <br />
 
-<br />
-
