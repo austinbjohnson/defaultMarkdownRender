@@ -5,6 +5,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   public static readonly viewType = 'markdownLiveRender.editor';
 
   private syncManagers = new Map<string, SyncManager>();
+  private lastSentContent = new Map<string, string>();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -54,18 +55,30 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     // Clean up when editor is closed
     webviewPanel.onDidDispose(() => {
       changeDocumentSubscription.dispose();
-      const manager = this.syncManagers.get(document.uri.toString());
+      const uri = document.uri.toString();
+      const manager = this.syncManagers.get(uri);
       if (manager) {
         manager.dispose();
-        this.syncManagers.delete(document.uri.toString());
+        this.syncManagers.delete(uri);
       }
+      this.lastSentContent.delete(uri);
     });
   }
 
   private updateWebview(webview: vscode.Webview, document: vscode.TextDocument) {
+    const content = document.getText();
+    const uri = document.uri.toString();
+    
+    // Skip if content hasn't changed (avoid redundant updates)
+    if (this.lastSentContent.get(uri) === content) {
+      return;
+    }
+    
+    this.lastSentContent.set(uri, content);
+    
     webview.postMessage({
       type: 'update',
-      content: document.getText(),
+      content,
       version: document.version,
     });
   }
