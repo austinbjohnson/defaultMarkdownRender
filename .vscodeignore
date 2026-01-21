@@ -6,3 +6,7 @@ node_modules/**
 tsconfig.json
 esbuild.config.js
 **/*.map
+*.jpg
+*.jpeg
+hello.md
+.claude/**
