@@ -126,6 +126,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     <button id="btn-bold" title="Bold (Cmd+B)"><b>B</b></button>
     <button id="btn-italic" title="Italic (Cmd+I)"><i>I</i></button>
     <button id="btn-strikethrough" title="Strikethrough (Cmd+Shift+S)"><s>S</s></button>
+    <button id="btn-code" title="Inline Code (Cmd+\`)"><code>&lt;/&gt;</code></button>
     <span class="toolbar-separator"></span>
     <button id="btn-h1" title="Heading 1 (Cmd+1)">H1</button>
     <button id="btn-h2" title="Heading 2 (Cmd+2)">H2</button>
@@ -133,6 +134,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     <span class="toolbar-separator"></span>
     <button id="btn-bullet-list" title="Bullet List">• List</button>
     <button id="btn-ordered-list" title="Numbered List">1. List</button>
+    <button id="btn-task-list" title="Task List (Cmd+Shift+L)">☐</button>
+    <span class="toolbar-separator"></span>
+    <button id="btn-blockquote" title="Blockquote (Cmd+Shift+.)">❝</button>
+    <button id="btn-codeblock" title="Code Block (Cmd+Shift+\`)">{ }</button>
+    <button id="btn-link" title="Link (Cmd+K)">🔗</button>
     <button id="btn-hr" title="Horizontal Rule">—</button>
   </div>
   <div id="editor-container">

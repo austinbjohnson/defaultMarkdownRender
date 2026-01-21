@@ -1,8 +1,20 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/core';
-import { commonmark, toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand, wrapInBulletListCommand, wrapInOrderedListCommand, insertHrCommand } from '@milkdown/preset-commonmark';
+import { 
+  commonmark, 
+  toggleStrongCommand, 
+  toggleEmphasisCommand, 
+  wrapInHeadingCommand, 
+  wrapInBulletListCommand, 
+  wrapInOrderedListCommand, 
+  insertHrCommand,
+  toggleInlineCodeCommand,
+  wrapInBlockquoteCommand,
+  createCodeBlockCommand,
+  toggleLinkCommand
+} from '@milkdown/preset-commonmark';
 import { gfm, toggleStrikethroughCommand } from '@milkdown/preset-gfm';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
-import { callCommand } from '@milkdown/utils';
+import { callCommand, $command } from '@milkdown/utils';
 import { nord } from '@milkdown/theme-nord';
 // Import our VS Code theme-aware styles (NOT the Nord CSS)
 import './styles.css';
@@ -55,16 +67,43 @@ function insertHorizontalRule() {
   runCommand(callCommand(insertHrCommand.key));
 }
 
+function toggleInlineCode() {
+  runCommand(callCommand(toggleInlineCodeCommand.key));
+}
+
+function toggleBlockquote() {
+  runCommand(callCommand(wrapInBlockquoteCommand.key));
+}
+
+function insertCodeBlock() {
+  runCommand(callCommand(createCodeBlockCommand.key));
+}
+
+function insertTaskList() {
+  // Task lists don't have a dedicated command, so we create a bullet list
+  // The user can type "[ ]" to convert to task list, or we insert the markdown directly
+  runCommand(callCommand(wrapInBulletListCommand.key));
+}
+
+function insertLink() {
+  runCommand(callCommand(toggleLinkCommand.key));
+}
+
 // Setup toolbar event listeners
 function setupToolbar() {
   document.getElementById('btn-bold')?.addEventListener('click', toggleBold);
   document.getElementById('btn-italic')?.addEventListener('click', toggleItalic);
   document.getElementById('btn-strikethrough')?.addEventListener('click', toggleStrikethrough);
+  document.getElementById('btn-code')?.addEventListener('click', toggleInlineCode);
   document.getElementById('btn-h1')?.addEventListener('click', () => setHeading(1));
   document.getElementById('btn-h2')?.addEventListener('click', () => setHeading(2));
   document.getElementById('btn-h3')?.addEventListener('click', () => setHeading(3));
   document.getElementById('btn-bullet-list')?.addEventListener('click', toggleBulletList);
   document.getElementById('btn-ordered-list')?.addEventListener('click', toggleOrderedList);
+  document.getElementById('btn-task-list')?.addEventListener('click', insertTaskList);
+  document.getElementById('btn-blockquote')?.addEventListener('click', toggleBlockquote);
+  document.getElementById('btn-codeblock')?.addEventListener('click', insertCodeBlock);
+  document.getElementById('btn-link')?.addEventListener('click', insertLink);
   document.getElementById('btn-hr')?.addEventListener('click', insertHorizontalRule);
 }
 
@@ -97,6 +136,30 @@ function setupKeyboardShortcuts() {
       e.preventDefault();
       e.stopPropagation();
       setHeading(3);
+    } else if (isMod && e.key === '`') {
+      // Cmd+` for inline code, Cmd+Shift+` for code block
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.shiftKey) {
+        insertCodeBlock();
+      } else {
+        toggleInlineCode();
+      }
+    } else if (isMod && e.shiftKey && e.key === 'l') {
+      // Cmd+Shift+L for task list
+      e.preventDefault();
+      e.stopPropagation();
+      insertTaskList();
+    } else if (isMod && e.shiftKey && e.key === '.') {
+      // Cmd+Shift+. for blockquote
+      e.preventDefault();
+      e.stopPropagation();
+      toggleBlockquote();
+    } else if (isMod && e.key === 'k') {
+      // Cmd+K for link
+      e.preventDefault();
+      e.stopPropagation();
+      insertLink();
     }
   }, true);
 }
