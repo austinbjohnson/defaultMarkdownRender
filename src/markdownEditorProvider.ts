@@ -90,21 +90,37 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     switch (message.type) {
       case 'edit':
         if (message.content !== undefined) {
-          const manager = this.syncManagers.get(document.uri.toString());
-          if (manager) {
-            manager.isInternalChange = true;
-          }
+          const uri = document.uri.toString();
+          const manager = this.syncManagers.get(uri);
 
-          const edit = new vscode.WorkspaceEdit();
-          edit.replace(
-            document.uri,
-            new vscode.Range(0, 0, document.lineCount, 0),
-            message.content
-          );
-          await vscode.workspace.applyEdit(edit);
+          // Mark this as an internal change so we don't echo updates back into the webview.
+          // IMPORTANT: We delay releasing this flag until the next tick because VS Code can
+          // fire additional change events after applyEdit resolves.
+          if (manager) manager.isInternalChange = true;
 
-          if (manager) {
-            manager.isInternalChange = false;
+          try {
+            // If content is identical, skip the edit to avoid churn (and potential cursor jumps).
+            if (document.getText() === message.content) {
+              this.lastSentContent.set(uri, message.content);
+              break;
+            }
+
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(
+              document.uri,
+              new vscode.Range(0, 0, document.lineCount, 0),
+              message.content
+            );
+            await vscode.workspace.applyEdit(edit);
+
+            // Track content we've already sent/applied so updateWebview can skip redundant pushes.
+            this.lastSentContent.set(uri, message.content);
+          } finally {
+            if (manager) {
+              setTimeout(() => {
+                manager.isInternalChange = false;
+              }, 0);
+            }
           }
         }
         break;

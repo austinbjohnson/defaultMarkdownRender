@@ -47,6 +47,13 @@ let currentVersion = 0;
 let pendingUpdate: string | null = null;
 let updateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 const UPDATE_DEBOUNCE_MS = 50; // Debounce rapid updates (AI streaming)
+const USER_IDLE_BEFORE_EXTERNAL_APPLY_MS = 300; // Buffer external updates while user is actively typing
+let lastLocalEditAt = 0;
+
+function normalizeMarkdownForCompare(markdown: string): string {
+  // Normalize line endings to reduce false mismatches between VS Code and Milkdown outputs.
+  return markdown.replace(/\r\n/g, '\n');
+}
 
 // Toolbar action handlers
 function runCommand(command: ReturnType<typeof callCommand>) {
@@ -367,6 +374,19 @@ function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     const isMod = e.metaKey || e.ctrlKey;
 
+    // Track active typing to avoid applying external updates mid-keystroke.
+    // This is intentionally broad (covers fast typing, backspace, enter).
+    const target = e.target as HTMLElement | null;
+    const isInEditor = Boolean(target && target.closest && target.closest('.ProseMirror'));
+    if (
+      isInEditor &&
+      !isMod &&
+      !e.altKey &&
+      (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter' || e.key === 'Delete')
+    ) {
+      lastLocalEditAt = Date.now();
+    }
+
     if (isMod && e.key === 'b') {
       e.preventDefault();
       e.stopPropagation();
@@ -434,6 +454,7 @@ async function initializeEditor(content: string) {
       ctx.set(defaultValueCtx, content);
       ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
         if (!isUpdatingFromExtension && markdown !== prevMarkdown) {
+          lastLocalEditAt = Date.now();
           vscode.postMessage({
             type: 'edit',
             content: markdown,
@@ -472,7 +493,21 @@ async function updateEditorContent(content: string) {
 
 function applyPendingUpdate() {
   if (!editor || pendingUpdate === null) return;
-  
+
+  // Avoid applying external updates while the user is actively typing.
+  // Applying replaceAll mid-typing can reset selection and cause the cursor to "jump".
+  const msSinceLocalEdit = Date.now() - lastLocalEditAt;
+  if (msSinceLocalEdit < USER_IDLE_BEFORE_EXTERNAL_APPLY_MS) {
+    if (updateDebounceTimer) {
+      clearTimeout(updateDebounceTimer);
+    }
+    updateDebounceTimer = setTimeout(
+      applyPendingUpdate,
+      USER_IDLE_BEFORE_EXTERNAL_APPLY_MS - msSinceLocalEdit
+    );
+    return;
+  }
+
   const content = pendingUpdate;
   pendingUpdate = null;
   
@@ -487,7 +522,7 @@ function applyPendingUpdate() {
   }
   
   // Skip update if content is identical (avoids unnecessary work)
-  if (currentMarkdown === content) {
+  if (normalizeMarkdownForCompare(currentMarkdown) === normalizeMarkdownForCompare(content)) {
     return;
   }
   
@@ -547,6 +582,7 @@ async function reinitializeEditor(content: string) {
         ctx.set(defaultValueCtx, content);
         ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
           if (!isUpdatingFromExtension && markdown !== prevMarkdown) {
+            lastLocalEditAt = Date.now();
             vscode.postMessage({
               type: 'edit',
               content: markdown,
