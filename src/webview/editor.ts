@@ -1,4 +1,5 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/core';
+import { TextSelection } from '@milkdown/prose/state';
 import { 
   commonmark, 
   toggleStrongCommand, 
@@ -26,7 +27,7 @@ import {
 } from '@milkdown/preset-gfm';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { history } from '@milkdown/plugin-history';
-import { callCommand, $command } from '@milkdown/utils';
+import { callCommand, replaceAll, getMarkdown } from '@milkdown/utils';
 import { nord } from '@milkdown/theme-nord';
 // Import our VS Code theme-aware styles (NOT the Nord CSS)
 import './styles.css';
@@ -43,6 +44,9 @@ const vscode = acquireVsCodeApi();
 let editor: Editor | null = null;
 let isUpdatingFromExtension = false;
 let currentVersion = 0;
+let pendingUpdate: string | null = null;
+let updateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const UPDATE_DEBOUNCE_MS = 50; // Debounce rapid updates (AI streaming)
 
 // Toolbar action handlers
 function runCommand(command: ReturnType<typeof callCommand>) {
@@ -454,10 +458,86 @@ async function updateEditorContent(content: string) {
     return;
   }
 
-  isUpdatingFromExtension = true;
+  // Debounce rapid updates (e.g., during AI streaming)
+  pendingUpdate = content;
+  
+  if (updateDebounceTimer) {
+    clearTimeout(updateDebounceTimer);
+  }
+  
+  updateDebounceTimer = setTimeout(() => {
+    applyPendingUpdate();
+  }, UPDATE_DEBOUNCE_MS);
+}
 
-  // For now, recreate the editor with new content
-  // TODO: Implement smart diff-based updates to preserve cursor position
+function applyPendingUpdate() {
+  if (!editor || pendingUpdate === null) return;
+  
+  const content = pendingUpdate;
+  pendingUpdate = null;
+  
+  // Get current markdown from editor to check if update is needed
+  let currentMarkdown = '';
+  try {
+    editor.action((ctx) => {
+      currentMarkdown = getMarkdown()(ctx);
+    });
+  } catch (e) {
+    // If we can't get current markdown, proceed with update
+  }
+  
+  // Skip update if content is identical (avoids unnecessary work)
+  if (currentMarkdown === content) {
+    return;
+  }
+  
+  isUpdatingFromExtension = true;
+  
+  // Save cursor position before update
+  let savedSelection: { anchor: number; head: number } | null = null;
+  try {
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const { anchor, head } = view.state.selection;
+      savedSelection = { anchor, head };
+    });
+  } catch (e) {
+    // If we can't get selection, proceed without it
+  }
+  
+  // Use replaceAll to update content without recreating editor
+  // This is much faster and preserves editor state better
+  try {
+    editor.action(replaceAll(content));
+    
+    // Restore cursor position if valid
+    if (savedSelection) {
+      editor.action((ctx) => {
+        try {
+          const view = ctx.get(editorViewCtx);
+          const docLength = view.state.doc.content.size;
+          
+          // Clamp selection to valid range (ensure within document bounds)
+          const anchor = Math.min(Math.max(1, savedSelection!.anchor), docLength - 1);
+          
+          // Create and apply new selection
+          const newSelection = TextSelection.create(view.state.doc, anchor);
+          view.dispatch(view.state.tr.setSelection(newSelection));
+        } catch (e) {
+          // If selection restoration fails, that's okay - cursor will be at start
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('replaceAll failed, falling back to re-initialization:', e);
+    // Fallback: reinitialize if replaceAll fails
+    reinitializeEditor(content);
+  }
+  
+  isUpdatingFromExtension = false;
+}
+
+async function reinitializeEditor(content: string) {
   const editorContainer = document.getElementById('editor');
   if (editorContainer) {
     editorContainer.innerHTML = '';
@@ -481,8 +561,6 @@ async function updateEditorContent(content: string) {
       .use(listener)
       .create();
   }
-
-  isUpdatingFromExtension = false;
 }
 
 // Handle messages from the extension
