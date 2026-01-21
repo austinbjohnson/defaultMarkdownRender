@@ -103,6 +103,11 @@ function insertLink() {
 
 // Table functions
 function insertTable(rows: number, cols: number) {
+  // Focus editor first to ensure table inserts at cursor position
+  const editorEl = document.querySelector('.ProseMirror') as HTMLElement;
+  if (editorEl) {
+    editorEl.focus();
+  }
   runCommand(callCommand(insertTableCommand.key, { row: rows, col: cols }));
   closeTableDropdown();
 }
@@ -170,6 +175,11 @@ function initGridPicker() {
       gridPicker.appendChild(cell);
     }
   }
+  
+  // Prevent focus loss when interacting with grid
+  gridPicker.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+  });
   
   // Add hover and click handlers
   gridPicker.addEventListener('mouseover', handleGridHover);
@@ -286,8 +296,12 @@ function setupToolbar() {
   document.getElementById('btn-link')?.addEventListener('click', insertLink);
   document.getElementById('btn-hr')?.addEventListener('click', insertHorizontalRule);
   
-  // Table dropdown
-  document.getElementById('btn-table')?.addEventListener('click', (e) => {
+  // Table dropdown - prevent focus loss from editor
+  const tableBtn = document.getElementById('btn-table');
+  tableBtn?.addEventListener('mousedown', (e) => {
+    e.preventDefault(); // Prevent focus from leaving editor
+  });
+  tableBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
     toggleTableDropdown();
   });
