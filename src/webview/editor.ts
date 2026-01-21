@@ -4,7 +4,8 @@ import { gfm, toggleStrikethroughCommand } from '@milkdown/preset-gfm';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { callCommand } from '@milkdown/utils';
 import { nord } from '@milkdown/theme-nord';
-import '@milkdown/theme-nord/style.css';
+// Import our VS Code theme-aware styles (NOT the Nord CSS)
+import './styles.css';
 
 // Acquire VS Code API
 declare function acquireVsCodeApi(): {

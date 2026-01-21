@@ -4,6 +4,12 @@
   "description": "WYSIWYG markdown editor with live sync for AI collaboration",
   "version": "0.1.0",
   "publisher": "ajohnson",
+  "icon": "media/icon_z_broccoli.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/austinbjohnson/defaultMarkdownRender"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
