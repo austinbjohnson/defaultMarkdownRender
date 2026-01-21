@@ -161,6 +161,15 @@ function selectTable() {
   hideContextMenu();
 }
 
+function deleteTable() {
+  // Select the entire table, then delete
+  runCommand(callCommand(selectTableCommand.key));
+  setTimeout(() => {
+    runCommand(callCommand(deleteSelectedCellsCommand.key));
+  }, 10);
+  hideContextMenu();
+}
+
 // Grid picker state
 let gridPickerInitialized = false;
 
@@ -326,6 +335,7 @@ function setupToolbar() {
   document.getElementById('ctx-add-row-above')?.addEventListener('click', addRowAbove);
   document.getElementById('ctx-add-row-below')?.addEventListener('click', addRowBelow);
   document.getElementById('ctx-delete-row')?.addEventListener('click', deleteRow);
+  document.getElementById('ctx-delete-table')?.addEventListener('click', deleteTable);
   document.getElementById('ctx-move-row-up')?.addEventListener('click', moveRowUp);
   document.getElementById('ctx-move-row-down')?.addEventListener('click', moveRowDown);
   

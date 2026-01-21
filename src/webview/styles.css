@@ -160,6 +160,14 @@ html, body {
   margin: 4px 0;
 }
 
+.context-menu button.danger {
+  color: var(--vscode-errorForeground, #f48771);
+}
+
+.context-menu button.danger:hover {
+  background-color: rgba(244, 135, 113, 0.15);
+}
+
 /* ==========================================================================
    Editor Container
    ========================================================================== */

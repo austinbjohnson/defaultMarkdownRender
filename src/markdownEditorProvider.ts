@@ -161,6 +161,8 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     <div class="context-menu-separator"></div>
     <button id="ctx-move-row-up">Move row up</button>
     <button id="ctx-move-row-down">Move row down</button>
+    <div class="context-menu-separator"></div>
+    <button id="ctx-delete-table" class="danger">Delete table</button>
   </div>
   <div id="editor-container">
     <div id="editor"></div>
