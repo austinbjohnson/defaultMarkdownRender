@@ -87,9 +87,10 @@
   "dependencies": {
     "@milkdown/core": "^7.3.6",
     "@milkdown/ctx": "^7.3.6",
+    "@milkdown/plugin-history": "^7.18.0",
+    "@milkdown/plugin-listener": "^7.3.6",
     "@milkdown/preset-commonmark": "^7.3.6",
     "@milkdown/preset-gfm": "^7.3.6",
-    "@milkdown/plugin-listener": "^7.3.6",
     "@milkdown/theme-nord": "^7.3.6",
     "@milkdown/utils": "^7.3.6",
     "diff-match-patch": "^1.0.5"

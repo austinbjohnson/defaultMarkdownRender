@@ -19,9 +19,13 @@ import {
   addRowBeforeCommand,
   addRowAfterCommand,
   deleteSelectedCellsCommand,
-  moveRowCommand
+  moveRowCommand,
+  selectRowCommand,
+  selectColCommand,
+  selectTableCommand
 } from '@milkdown/preset-gfm';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
+import { history } from '@milkdown/plugin-history';
 import { callCommand, $command } from '@milkdown/utils';
 import { nord } from '@milkdown/theme-nord';
 // Import our VS Code theme-aware styles (NOT the Nord CSS)
@@ -127,6 +131,23 @@ function moveRowUp() {
 function moveRowDown() {
   // Move current row down by swapping with next row
   runCommand(callCommand(moveRowCommand.key, { from: -1, to: 0 }));
+  hideContextMenu();
+}
+
+function selectRow() {
+  // Select current row (index -1 means current)
+  runCommand(callCommand(selectRowCommand.key, { index: -1 }));
+  hideContextMenu();
+}
+
+function selectColumn() {
+  // Select current column (index -1 means current)
+  runCommand(callCommand(selectColCommand.key, { index: -1 }));
+  hideContextMenu();
+}
+
+function selectTable() {
+  runCommand(callCommand(selectTableCommand.key));
   hideContextMenu();
 }
 
@@ -280,6 +301,9 @@ function setupToolbar() {
   });
   
   // Context menu for table operations
+  document.getElementById('ctx-select-row')?.addEventListener('click', selectRow);
+  document.getElementById('ctx-select-col')?.addEventListener('click', selectColumn);
+  document.getElementById('ctx-select-table')?.addEventListener('click', selectTable);
   document.getElementById('ctx-add-row-above')?.addEventListener('click', addRowAbove);
   document.getElementById('ctx-add-row-below')?.addEventListener('click', addRowBelow);
   document.getElementById('ctx-delete-row')?.addEventListener('click', deleteRow);
@@ -387,6 +411,7 @@ async function initializeEditor(content: string) {
     .config(nord)
     .use(commonmark)
     .use(gfm)
+    .use(history)
     .use(listener)
     .create();
 
@@ -423,6 +448,7 @@ async function updateEditorContent(content: string) {
       .config(nord)
       .use(commonmark)
       .use(gfm)
+      .use(history)
       .use(listener)
       .create();
   }

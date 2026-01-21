@@ -151,6 +151,10 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   </div>
   <!-- Table context menu for row operations -->
   <div id="table-context-menu" class="context-menu" style="display: none;">
+    <button id="ctx-select-row">Select row</button>
+    <button id="ctx-select-col">Select column</button>
+    <button id="ctx-select-table">Select table</button>
+    <div class="context-menu-separator"></div>
     <button id="ctx-add-row-above">Add row above</button>
     <button id="ctx-add-row-below">Add row below</button>
     <button id="ctx-delete-row">Delete row</button>
