@@ -96,9 +96,40 @@ function insertCodeBlock() {
 }
 
 function insertTaskList() {
-  // Task lists don't have a dedicated command, so we create a bullet list
-  // The user can type "[ ]" to convert to task list, or we insert the markdown directly
-  runCommand(callCommand(wrapInBulletListCommand.key));
+  // Create a proper task list by inserting a bullet list then converting it
+  // First create the bullet list, then we'll set the checked attribute
+  if (!editor) return;
+  
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const { schema } = view.state;
+    const { from } = view.state.selection;
+    
+    // Get the list_item node type
+    const listItemType = schema.nodes.list_item;
+    const bulletListType = schema.nodes.bullet_list;
+    const paragraphType = schema.nodes.paragraph;
+    
+    if (!listItemType || !bulletListType || !paragraphType) {
+      // Fallback to basic approach
+      runCommand(callCommand(wrapInBulletListCommand.key));
+      return;
+    }
+    
+    // Create a task list item with checked=false
+    const paragraph = paragraphType.create(null);
+    const listItem = listItemType.create({ checked: false }, paragraph);
+    const bulletList = bulletListType.create(null, listItem);
+    
+    // Insert the task list
+    const tr = view.state.tr.replaceSelectionWith(bulletList);
+    
+    // Move cursor into the paragraph
+    const newPos = from + 3; // Position inside the paragraph
+    tr.setSelection(TextSelection.create(tr.doc, newPos));
+    
+    view.dispatch(tr);
+  });
 }
 
 function insertLink() {
@@ -297,6 +328,311 @@ function hideContextMenu() {
   }
 }
 
+// ==========================================================================
+// Slash Command Menu
+// ==========================================================================
+
+let slashMenuActive = false;
+let slashTriggerPos = 0;
+let slashFilter = '';
+let selectedSlashIndex = 0;
+
+// Map of command IDs to their handler functions
+const slashCommands: Record<string, () => void> = {
+  'h1': () => setHeading(1),
+  'h2': () => setHeading(2),
+  'h3': () => setHeading(3),
+  'bullet': toggleBulletList,
+  'number': toggleOrderedList,
+  'todo': insertTaskList,
+  'quote': toggleBlockquote,
+  'code': insertCodeBlock,
+  'table': () => {
+    // For table, show the grid picker
+    toggleTableDropdown();
+  },
+  'link': insertLink,
+  'hr': insertHorizontalRule,
+};
+
+function showSlashMenu() {
+  const menu = document.getElementById('slash-menu');
+  if (!menu || !editor) return;
+  
+  slashMenuActive = true;
+  slashFilter = '';
+  selectedSlashIndex = 0;
+  
+  // Get cursor position from ProseMirror
+  let coords = { left: 100, top: 100 };
+  try {
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const pos = view.state.selection.from;
+      slashTriggerPos = pos;
+      coords = view.coordsAtPos(pos);
+    });
+  } catch (e) {
+    console.warn('Could not get cursor position');
+  }
+  
+  // Position menu below cursor
+  const menuHeight = 320;
+  const viewportHeight = window.innerHeight;
+  
+  // Check if menu would go below viewport
+  let top = coords.top + 20;
+  if (top + menuHeight > viewportHeight) {
+    top = coords.top - menuHeight - 10;
+  }
+  
+  menu.style.left = `${Math.max(10, coords.left)}px`;
+  menu.style.top = `${Math.max(10, top)}px`;
+  menu.style.display = 'block';
+  
+  // Update filter display and reset selection
+  updateSlashFilter();
+  updateSlashSelection();
+}
+
+function hideSlashMenu() {
+  const menu = document.getElementById('slash-menu');
+  if (menu) {
+    menu.style.display = 'none';
+  }
+  slashMenuActive = false;
+  slashFilter = '';
+  selectedSlashIndex = 0;
+}
+
+function updateSlashFilter() {
+  const filterEl = document.querySelector('.slash-menu-filter');
+  if (filterEl) {
+    filterEl.textContent = slashFilter;
+  }
+  
+  // Filter the menu items
+  const buttons = document.querySelectorAll('.slash-menu button[data-command]');
+  let visibleCount = 0;
+  const filterLower = slashFilter.toLowerCase();
+  
+  buttons.forEach((btn) => {
+    const button = btn as HTMLElement;
+    const command = button.dataset.command || '';
+    const keywords = button.dataset.keywords || '';
+    const label = button.querySelector('.slash-label')?.textContent || '';
+    
+    // Match against command, keywords, and label
+    const searchText = `${command} ${keywords} ${label}`.toLowerCase();
+    const matches = filterLower === '' || searchText.includes(filterLower);
+    
+    if (matches) {
+      button.classList.remove('hidden');
+      visibleCount++;
+    } else {
+      button.classList.add('hidden');
+    }
+  });
+  
+  // Reset selection if current selection is hidden
+  if (visibleCount > 0) {
+    selectedSlashIndex = Math.min(selectedSlashIndex, visibleCount - 1);
+  } else {
+    selectedSlashIndex = 0;
+  }
+  
+  updateSlashSelection();
+}
+
+function updateSlashSelection() {
+  const buttons = document.querySelectorAll('.slash-menu button[data-command]:not(.hidden)');
+  buttons.forEach((btn, idx) => {
+    if (idx === selectedSlashIndex) {
+      btn.classList.add('selected');
+    } else {
+      btn.classList.remove('selected');
+    }
+  });
+}
+
+function getVisibleSlashButtons(): HTMLElement[] {
+  return Array.from(document.querySelectorAll('.slash-menu button[data-command]:not(.hidden)')) as HTMLElement[];
+}
+
+function executeSlashCommand(command: string) {
+  // First, delete the slash and filter text from the document
+  if (editor) {
+    editor.action((ctx) => {
+      try {
+        const view = ctx.get(editorViewCtx);
+        const currentPos = view.state.selection.from;
+        // Delete from trigger position to current position (the "/" and filter text)
+        const tr = view.state.tr.delete(slashTriggerPos - 1, currentPos);
+        view.dispatch(tr);
+      } catch (e) {
+        console.warn('Could not delete slash trigger text');
+      }
+    });
+  }
+  
+  hideSlashMenu();
+  
+  // Execute the command
+  const handler = slashCommands[command];
+  if (handler) {
+    // Small delay to let the deletion complete
+    setTimeout(() => {
+      handler();
+    }, 10);
+  }
+}
+
+function handleSlashKeydown(e: KeyboardEvent): boolean {
+  if (!slashMenuActive) return false;
+  
+  const visibleButtons = getVisibleSlashButtons();
+  
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      e.stopPropagation();
+      selectedSlashIndex = Math.min(selectedSlashIndex + 1, visibleButtons.length - 1);
+      updateSlashSelection();
+      // Scroll selected item into view
+      visibleButtons[selectedSlashIndex]?.scrollIntoView({ block: 'nearest' });
+      return true;
+      
+    case 'ArrowUp':
+      e.preventDefault();
+      e.stopPropagation();
+      selectedSlashIndex = Math.max(selectedSlashIndex - 1, 0);
+      updateSlashSelection();
+      visibleButtons[selectedSlashIndex]?.scrollIntoView({ block: 'nearest' });
+      return true;
+      
+    case 'Enter':
+      e.preventDefault();
+      e.stopPropagation();
+      const selectedBtn = visibleButtons[selectedSlashIndex];
+      if (selectedBtn) {
+        const command = selectedBtn.dataset.command;
+        if (command) {
+          executeSlashCommand(command);
+        }
+      }
+      return true;
+      
+    case 'Escape':
+      e.preventDefault();
+      e.stopPropagation();
+      hideSlashMenu();
+      return true;
+      
+    case 'Backspace':
+      if (slashFilter.length > 0) {
+        slashFilter = slashFilter.slice(0, -1);
+        updateSlashFilter();
+      } else {
+        // If no filter and backspace, close menu (user deleted the /)
+        hideSlashMenu();
+      }
+      return false; // Let the editor handle the backspace too
+      
+    case ' ':
+      // Space closes the menu (user is typing normal content)
+      hideSlashMenu();
+      return false;
+      
+    default:
+      // If it's a printable character, add to filter
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        slashFilter += e.key;
+        updateSlashFilter();
+        
+        // If no results, close menu
+        const stillVisible = getVisibleSlashButtons();
+        if (stillVisible.length === 0) {
+          hideSlashMenu();
+        }
+      }
+      return false;
+  }
+}
+
+function setupSlashMenu() {
+  const menu = document.getElementById('slash-menu');
+  if (!menu) return;
+  
+  // Prevent clicks on menu from stealing focus
+  menu.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+  });
+  
+  // Handle clicks on menu items
+  menu.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const button = target.closest('button[data-command]') as HTMLElement;
+    if (button) {
+      const command = button.dataset.command;
+      if (command) {
+        executeSlashCommand(command);
+      }
+    }
+  });
+  
+  // Handle hover to update selection
+  menu.addEventListener('mouseover', (e) => {
+    const target = e.target as HTMLElement;
+    const button = target.closest('button[data-command]') as HTMLElement;
+    if (button && !button.classList.contains('hidden')) {
+      const visibleButtons = getVisibleSlashButtons();
+      const idx = visibleButtons.indexOf(button);
+      if (idx !== -1) {
+        selectedSlashIndex = idx;
+        updateSlashSelection();
+      }
+    }
+  });
+  
+  // Close menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (slashMenuActive && !menu.contains(e.target as Node)) {
+      hideSlashMenu();
+    }
+  });
+}
+
+function isInCodeBlock(): boolean {
+  if (!editor) return false;
+  
+  let inCode = false;
+  try {
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const { $from } = view.state.selection;
+      
+      // Check if we're inside a code block or code mark
+      for (let d = $from.depth; d > 0; d--) {
+        const node = $from.node(d);
+        if (node.type.name === 'code_block' || node.type.name === 'fence') {
+          inCode = true;
+          break;
+        }
+      }
+      
+      // Also check for inline code mark
+      if (!inCode) {
+        const marks = $from.marks();
+        inCode = marks.some(m => m.type.name === 'code' || m.type.name === 'inlineCode');
+      }
+    });
+  } catch (e) {
+    // If we can't determine, assume not in code
+  }
+  
+  return inCode;
+}
+
 // Setup toolbar event listeners
 function setupToolbar() {
   document.getElementById('btn-bold')?.addEventListener('click', toggleBold);
@@ -365,6 +701,13 @@ function setupToolbar() {
 // Setup keyboard shortcuts
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
+    // Handle slash menu navigation first
+    if (slashMenuActive) {
+      if (handleSlashKeydown(e)) {
+        return;
+      }
+    }
+    
     const isMod = e.metaKey || e.ctrlKey;
 
     if (isMod && e.key === 'b') {
@@ -424,6 +767,29 @@ function setupKeyboardShortcuts() {
   }, true);
 }
 
+// Setup slash command trigger detection
+function setupSlashTrigger() {
+  // We need to detect "/" being typed in the editor
+  // This is done via the 'input' event on the ProseMirror editor
+  const editorContainer = document.getElementById('editor');
+  if (!editorContainer) return;
+  
+  // Use a MutationObserver approach or input event
+  // Actually, better to listen to keydown for "/" specifically
+  document.addEventListener('keydown', (e) => {
+    // Only trigger if not already in slash menu and "/" is pressed
+    if (e.key === '/' && !slashMenuActive && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Check if we're in a code block - don't trigger there
+      if (!isInCodeBlock()) {
+        // Small delay to let the "/" be inserted first
+        setTimeout(() => {
+          showSlashMenu();
+        }, 10);
+      }
+    }
+  });
+}
+
 async function initializeEditor(content: string) {
   const editorContainer = document.getElementById('editor');
   if (!editorContainer) return;
@@ -450,6 +816,8 @@ async function initializeEditor(content: string) {
 
   setupToolbar();
   setupKeyboardShortcuts();
+  setupSlashMenu();
+  setupSlashTrigger();
 }
 
 async function updateEditorContent(content: string) {

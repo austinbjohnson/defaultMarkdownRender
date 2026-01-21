@@ -35,9 +35,11 @@ Soft morning mist falls\
 Cherry blossoms drift downstream\
 Spring awakens slow
 
-| <br /> | <br /> | <br /> |
-| :----- | :----- | :----- |
-| <br /> | <br /> | <br /> |
+* what id this was working? 
+
+<br />
+
+<br />
 
 <br />
 

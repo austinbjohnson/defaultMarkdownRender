@@ -177,6 +177,72 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     <div class="context-menu-separator"></div>
     <button id="ctx-delete-table" class="danger">Delete table</button>
   </div>
+  <!-- Slash command menu -->
+  <div id="slash-menu" class="slash-menu" style="display: none;">
+    <div class="slash-menu-header">
+      <span class="slash-menu-filter"></span>
+    </div>
+    <div class="slash-menu-items">
+      <button data-command="h1" data-keywords="heading header title">
+        <span class="slash-icon">H1</span>
+        <span class="slash-label">Heading 1</span>
+        <span class="slash-hint">Large heading</span>
+      </button>
+      <button data-command="h2" data-keywords="heading header title">
+        <span class="slash-icon">H2</span>
+        <span class="slash-label">Heading 2</span>
+        <span class="slash-hint">Medium heading</span>
+      </button>
+      <button data-command="h3" data-keywords="heading header title">
+        <span class="slash-icon">H3</span>
+        <span class="slash-label">Heading 3</span>
+        <span class="slash-hint">Small heading</span>
+      </button>
+      <div class="slash-menu-separator"></div>
+      <button data-command="bullet" data-keywords="ul unordered list bullet points">
+        <span class="slash-icon">•</span>
+        <span class="slash-label">Bullet List</span>
+        <span class="slash-hint">Unordered list</span>
+      </button>
+      <button data-command="number" data-keywords="ol ordered list numbered">
+        <span class="slash-icon">1.</span>
+        <span class="slash-label">Numbered List</span>
+        <span class="slash-hint">Ordered list</span>
+      </button>
+      <button data-command="todo" data-keywords="task checkbox check list">
+        <span class="slash-icon">☐</span>
+        <span class="slash-label">Task List</span>
+        <span class="slash-hint">Checklist</span>
+      </button>
+      <div class="slash-menu-separator"></div>
+      <button data-command="quote" data-keywords="blockquote citation">
+        <span class="slash-icon">❝</span>
+        <span class="slash-label">Blockquote</span>
+        <span class="slash-hint">Quote block</span>
+      </button>
+      <button data-command="code" data-keywords="codeblock pre syntax">
+        <span class="slash-icon">{ }</span>
+        <span class="slash-label">Code Block</span>
+        <span class="slash-hint">Code snippet</span>
+      </button>
+      <button data-command="table" data-keywords="grid columns rows">
+        <span class="slash-icon">⊞</span>
+        <span class="slash-label">Table</span>
+        <span class="slash-hint">Insert table</span>
+      </button>
+      <div class="slash-menu-separator"></div>
+      <button data-command="link" data-keywords="url href anchor">
+        <span class="slash-icon">🔗</span>
+        <span class="slash-label">Link</span>
+        <span class="slash-hint">Insert link</span>
+      </button>
+      <button data-command="hr" data-keywords="divider separator horizontal rule line">
+        <span class="slash-icon">—</span>
+        <span class="slash-label">Divider</span>
+        <span class="slash-hint">Horizontal rule</span>
+      </button>
+    </div>
+  </div>
   <div id="editor-container">
     <div id="editor"></div>
   </div>
