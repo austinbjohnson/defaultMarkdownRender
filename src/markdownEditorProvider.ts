@@ -140,6 +140,23 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     <button id="btn-codeblock" title="Code Block (Cmd+Shift+\`)">{ }</button>
     <button id="btn-link" title="Link (Cmd+K)">🔗</button>
     <button id="btn-hr" title="Horizontal Rule">—</button>
+    <span class="toolbar-separator"></span>
+    <div class="toolbar-dropdown" id="table-dropdown">
+      <button id="btn-table" title="Insert Table (Cmd+Shift+T)">⊞</button>
+      <div class="dropdown-content" id="table-grid-picker">
+        <div class="grid-picker" id="grid-picker"></div>
+        <div class="grid-label" id="grid-label">Select size</div>
+      </div>
+    </div>
+  </div>
+  <!-- Table context menu for row operations -->
+  <div id="table-context-menu" class="context-menu" style="display: none;">
+    <button id="ctx-add-row-above">Add row above</button>
+    <button id="ctx-add-row-below">Add row below</button>
+    <button id="ctx-delete-row">Delete row</button>
+    <div class="context-menu-separator"></div>
+    <button id="ctx-move-row-up">Move row up</button>
+    <button id="ctx-move-row-down">Move row down</button>
   </div>
   <div id="editor-container">
     <div id="editor"></div>
