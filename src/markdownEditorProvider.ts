@@ -193,6 +193,10 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     <div class="context-menu-separator"></div>
     <button id="ctx-delete-table" class="danger">Delete table</button>
   </div>
+  <!-- Slash command menu -->
+  <div id="slash-menu" class="slash-menu" style="display: none;">
+    <div id="slash-menu-list"></div>
+  </div>
   <div id="editor-container">
     <div id="editor"></div>
   </div>

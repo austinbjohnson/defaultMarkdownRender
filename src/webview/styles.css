@@ -169,6 +169,77 @@ html, body {
 }
 
 /* ==========================================================================
+   Slash Command Menu
+   ========================================================================== */
+
+.slash-menu {
+  position: absolute;
+  background-color: var(--vscode-editorWidget-background, #252526);
+  border: 1px solid var(--vscode-editorWidget-border, #454545);
+  border-radius: 8px;
+  padding: 6px 0;
+  z-index: 2000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.slash-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.slash-menu-item:hover,
+.slash-menu-item.selected {
+  background-color: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+.slash-menu-item.selected {
+  background-color: var(--vscode-list-activeSelectionBackground, #094771);
+}
+
+.slash-menu-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--vscode-button-secondaryBackground, #3a3d41);
+  border-radius: 6px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.slash-menu-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.slash-menu-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vscode-editor-foreground, #d4d4d4);
+}
+
+.slash-menu-description {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+  margin-top: 2px;
+}
+
+.slash-menu-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+  font-size: 12px;
+}
+
+/* ==========================================================================
    Editor Container
    ========================================================================== */
 
