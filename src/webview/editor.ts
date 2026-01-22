@@ -58,6 +58,38 @@ const OUTGOING_EDIT_DEBOUNCE_MS = 16; // ~1 frame at 60fps
 // Cache last known markdown to avoid expensive getMarkdown() calls
 let lastKnownMarkdown: string = '';
 
+// Slash command state
+let slashMenuVisible = false;
+let slashMenuSelectedIndex = 0;
+let slashTriggerPos: number | null = null;
+
+interface SlashCommand {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  keywords: string[];
+  action: () => void;
+}
+
+const slashCommands: SlashCommand[] = [
+  { id: 'h1', title: 'Heading 1', description: 'Large section heading', icon: 'H1', keywords: ['h1', 'heading', 'title'], action: () => setHeading(1) },
+  { id: 'h2', title: 'Heading 2', description: 'Medium section heading', icon: 'H2', keywords: ['h2', 'heading'], action: () => setHeading(2) },
+  { id: 'h3', title: 'Heading 3', description: 'Small section heading', icon: 'H3', keywords: ['h3', 'heading'], action: () => setHeading(3) },
+  { id: 'bullet', title: 'Bullet List', description: 'Create a simple bullet list', icon: '•', keywords: ['bullet', 'list', 'ul'], action: toggleBulletList },
+  { id: 'numbered', title: 'Numbered List', description: 'Create a numbered list', icon: '1.', keywords: ['numbered', 'list', 'ol', 'ordered'], action: toggleOrderedList },
+  { id: 'todo', title: 'Task List', description: 'Create a to-do checklist', icon: '☐', keywords: ['todo', 'task', 'checkbox', 'check'], action: insertTaskList },
+  { id: 'quote', title: 'Blockquote', description: 'Capture a quote', icon: '❝', keywords: ['quote', 'blockquote'], action: toggleBlockquote },
+  { id: 'code', title: 'Code Block', description: 'Add a code snippet', icon: '{ }', keywords: ['code', 'codeblock', 'snippet'], action: insertCodeBlock },
+  { id: 'table', title: 'Table', description: 'Insert a 3×3 table', icon: '⊞', keywords: ['table', 'grid'], action: () => insertTable(3, 3) },
+  { id: 'hr', title: 'Divider', description: 'Horizontal line separator', icon: '—', keywords: ['hr', 'divider', 'line', 'separator'], action: insertHorizontalRule },
+  { id: 'link', title: 'Link', description: 'Add a hyperlink', icon: '🔗', keywords: ['link', 'url', 'href'], action: insertLink },
+  { id: 'bold', title: 'Bold', description: 'Bold text', icon: 'B', keywords: ['bold', 'strong'], action: toggleBold },
+  { id: 'italic', title: 'Italic', description: 'Italic text', icon: 'I', keywords: ['italic', 'emphasis', 'em'], action: toggleItalic },
+  { id: 'strike', title: 'Strikethrough', description: 'Strike through text', icon: 'S', keywords: ['strike', 'strikethrough', 'del'], action: toggleStrikethrough },
+  { id: 'inline-code', title: 'Inline Code', description: 'Inline code snippet', icon: '<>', keywords: ['inline', 'code', 'monospace'], action: toggleInlineCode },
+];
+
 function normalizeMarkdownForCompare(markdown: string): string {
   // Normalize line endings to reduce false mismatches between VS Code and Milkdown outputs.
   return markdown.replace(/\r\n/g, '\n');
@@ -328,6 +360,185 @@ function hideContextMenu() {
   }
 }
 
+// ==========================================================================
+// Slash Command Menu
+// ==========================================================================
+
+function getFilteredCommands(query: string): SlashCommand[] {
+  if (!query) return slashCommands;
+  const lowerQuery = query.toLowerCase();
+  return slashCommands.filter(cmd =>
+    cmd.title.toLowerCase().includes(lowerQuery) ||
+    cmd.keywords.some(kw => kw.includes(lowerQuery))
+  );
+}
+
+function renderSlashMenu(commands: SlashCommand[]) {
+  const list = document.getElementById('slash-menu-list');
+  if (!list) return;
+
+  if (commands.length === 0) {
+    list.innerHTML = '<div class="slash-menu-empty">No commands found</div>';
+    return;
+  }
+
+  list.innerHTML = commands.map((cmd, i) => `
+    <div class="slash-menu-item${i === slashMenuSelectedIndex ? ' selected' : ''}" data-index="${i}">
+      <div class="slash-menu-icon">${cmd.icon}</div>
+      <div class="slash-menu-content">
+        <div class="slash-menu-title">${cmd.title}</div>
+        <div class="slash-menu-description">${cmd.description}</div>
+      </div>
+    </div>
+  `).join('');
+
+  // Add click handlers
+  list.querySelectorAll('.slash-menu-item').forEach((item, index) => {
+    item.addEventListener('click', () => executeSlashCommand(commands[index]));
+    item.addEventListener('mouseenter', () => {
+      slashMenuSelectedIndex = index;
+      updateSlashMenuSelection(commands);
+    });
+  });
+}
+
+function updateSlashMenuSelection(commands: SlashCommand[]) {
+  const items = document.querySelectorAll('.slash-menu-item');
+  items.forEach((item, i) => {
+    item.classList.toggle('selected', i === slashMenuSelectedIndex);
+  });
+  // Scroll selected item into view
+  const selected = items[slashMenuSelectedIndex];
+  if (selected) {
+    selected.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function showSlashMenu(x: number, y: number, query: string = '') {
+  const menu = document.getElementById('slash-menu');
+  if (!menu) return;
+
+  slashMenuVisible = true;
+  slashMenuSelectedIndex = 0;
+
+  const commands = getFilteredCommands(query);
+  renderSlashMenu(commands);
+
+  // Position menu at cursor
+  menu.style.display = 'block';
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+
+  // Adjust if menu goes off-screen
+  const rect = menu.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
+  const viewportWidth = window.innerWidth;
+
+  if (rect.bottom > viewportHeight) {
+    menu.style.top = `${y - rect.height - 24}px`;
+  }
+  if (rect.right > viewportWidth) {
+    menu.style.left = `${viewportWidth - rect.width - 16}px`;
+  }
+}
+
+function hideSlashMenu() {
+  const menu = document.getElementById('slash-menu');
+  if (menu) {
+    menu.style.display = 'none';
+  }
+  slashMenuVisible = false;
+  slashTriggerPos = null;
+}
+
+function executeSlashCommand(command: SlashCommand) {
+  if (!editor) return;
+
+  // Delete the slash and any typed query from the document
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const { state } = view;
+    const { from } = state.selection;
+
+    if (slashTriggerPos !== null && slashTriggerPos <= from) {
+      // Delete from slash position to current cursor
+      const tr = state.tr.delete(slashTriggerPos, from);
+      view.dispatch(tr);
+    }
+  });
+
+  hideSlashMenu();
+
+  // Execute the command after a small delay to ensure cleanup happened
+  setTimeout(() => {
+    command.action();
+  }, 10);
+}
+
+function handleSlashMenuKeydown(e: KeyboardEvent, commands: SlashCommand[]): boolean {
+  if (!slashMenuVisible) return false;
+
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      slashMenuSelectedIndex = (slashMenuSelectedIndex + 1) % commands.length;
+      updateSlashMenuSelection(commands);
+      return true;
+
+    case 'ArrowUp':
+      e.preventDefault();
+      slashMenuSelectedIndex = (slashMenuSelectedIndex - 1 + commands.length) % commands.length;
+      updateSlashMenuSelection(commands);
+      return true;
+
+    case 'Enter':
+    case 'Tab':
+      e.preventDefault();
+      if (commands[slashMenuSelectedIndex]) {
+        executeSlashCommand(commands[slashMenuSelectedIndex]);
+      }
+      return true;
+
+    case 'Escape':
+      e.preventDefault();
+      hideSlashMenu();
+      return true;
+  }
+
+  return false;
+}
+
+function getSlashQuery(): string {
+  if (!editor || slashTriggerPos === null) return '';
+
+  let query = '';
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const { state } = view;
+    const { from } = state.selection;
+
+    if (slashTriggerPos < from) {
+      query = state.doc.textBetween(slashTriggerPos + 1, from);
+    }
+  });
+  return query;
+}
+
+function getCursorCoords(): { x: number; y: number } | null {
+  if (!editor) return null;
+
+  let coords: { x: number; y: number } | null = null;
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const { state } = view;
+    const cursorCoords = view.coordsAtPos(state.selection.from);
+    if (cursorCoords) {
+      coords = { x: cursorCoords.left, y: cursorCoords.bottom + 4 };
+    }
+  });
+  return coords;
+}
+
 // Setup toolbar event listeners
 function setupToolbar() {
   document.getElementById('btn-bold')?.addEventListener('click', toggleBold);
@@ -409,6 +620,19 @@ function setupKeyboardShortcuts() {
       (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter' || e.key === 'Delete')
     ) {
       lastLocalEditAt = Date.now();
+    }
+
+    // Handle slash menu navigation
+    if (slashMenuVisible) {
+      const query = getSlashQuery();
+      const commands = getFilteredCommands(query);
+      if (handleSlashMenuKeydown(e, commands)) {
+        return;
+      }
+      // Hide menu if user presses space (they're done filtering)
+      if (e.key === ' ') {
+        hideSlashMenu();
+      }
     }
 
     if (isMod && e.key === 'b') {
@@ -495,6 +719,59 @@ async function initializeEditor(content: string) {
 
   setupToolbar();
   setupKeyboardShortcuts();
+  setupSlashCommands();
+}
+
+function setupSlashCommands() {
+  if (!editor) return;
+
+  // Monitor for slash input and update menu
+  const editorEl = document.querySelector('.ProseMirror');
+  if (!editorEl) return;
+
+  editorEl.addEventListener('input', () => {
+    if (!editor) return;
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const { state } = view;
+      const { from } = state.selection;
+
+      // Get the character before cursor
+      if (from <= 0) return;
+
+      const textBefore = state.doc.textBetween(Math.max(0, from - 20), from);
+
+      // Check if we should trigger slash menu
+      // Trigger: "/" at start of line or after whitespace
+      const slashMatch = textBefore.match(/(?:^|\s)(\/[a-zA-Z0-9]*)$/);
+
+      if (slashMatch) {
+        const slashIndex = from - slashMatch[1].length;
+        const query = slashMatch[1].slice(1); // Remove the "/"
+
+        if (slashTriggerPos === null) {
+          slashTriggerPos = slashIndex;
+        }
+
+        const coords = getCursorCoords();
+        if (coords) {
+          showSlashMenu(coords.x, coords.y, query);
+        }
+      } else if (slashMenuVisible) {
+        // No longer in a slash command context
+        hideSlashMenu();
+      }
+    });
+  });
+
+  // Hide menu when clicking outside
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('slash-menu');
+    if (menu && slashMenuVisible && !menu.contains(e.target as Node)) {
+      hideSlashMenu();
+    }
+  });
 }
 
 async function updateEditorContent(content: string) {
