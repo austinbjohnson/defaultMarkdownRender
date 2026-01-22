@@ -24,6 +24,56 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Track files currently in diff view - we should use raw markdown for these
+  const filesInDiff = new Set<string>();
+
+  // Monitor for diff tabs opening/closing
+  // When a diff is shown for an .md file, close our custom editor so raw markdown is visible
+  context.subscriptions.push(
+    vscode.window.tabGroups.onDidChangeTabs(async (event) => {
+      const diffConfig = vscode.workspace.getConfiguration('markdownLiveRender');
+      if (!diffConfig.get('useRawForDiffs', true)) {
+        return;
+      }
+
+      // Check opened tabs for diffs involving markdown files
+      for (const tab of event.opened) {
+        if (tab.input instanceof vscode.TabInputTextDiff) {
+          const modifiedUri = tab.input.modified;
+          if (modifiedUri.fsPath.endsWith('.md')) {
+            const uriString = modifiedUri.toString();
+            filesInDiff.add(uriString);
+            
+            // Find and close any custom editor tab for this file
+            // This lets the diff view show raw markdown
+            for (const group of vscode.window.tabGroups.all) {
+              for (const existingTab of group.tabs) {
+                if (
+                  existingTab.input instanceof vscode.TabInputCustom &&
+                  existingTab.input.uri.toString() === uriString &&
+                  existingTab.input.viewType === MarkdownEditorProvider.viewType
+                ) {
+                  // Close our custom editor - the diff will show raw text
+                  await vscode.window.tabGroups.close(existingTab);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Track when diff tabs are closed
+      for (const tab of event.closed) {
+        if (tab.input instanceof vscode.TabInputTextDiff) {
+          const modifiedUri = tab.input.modified;
+          if (modifiedUri.fsPath.endsWith('.md')) {
+            filesInDiff.delete(modifiedUri.toString());
+          }
+        }
+      }
+    })
+  );
+
   // Register command to open file with this editor
   context.subscriptions.push(
     vscode.commands.registerCommand('markdownLiveRender.openWith', async () => {

@@ -38,6 +38,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable the live markdown renderer for this workspace"
+        },
+        "markdownLiveRender.useRawForDiffs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically show raw markdown when viewing diffs (recommended for AI code review)"
         }
       }
     },
