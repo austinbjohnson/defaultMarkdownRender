@@ -28,9 +28,25 @@
             "filenamePattern": "*.md"
           }
         ],
-        "priority": "default"
+        "priority": "option"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "markdownLiveRender.openWithFromExplorer",
+          "when": "resourceExtname == .md",
+          "group": "navigation"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "markdownLiveRender.toggle",
+          "when": "resourceExtname == .md",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Markdown Live Render",
       "properties": {
@@ -38,17 +54,7 @@
           "type": "boolean",
           "default": true,
           "description": "Enable the live markdown renderer for this workspace"
-        },
-        "markdownLiveRender.useRawForDiffs": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically show raw markdown when viewing diffs (recommended for AI code review)"
         }
-      }
-    },
-    "configurationDefaults": {
-      "workbench.editorAssociations": {
-        "*.md": "markdownLiveRender.editor"
       }
     },
     "commands": [
@@ -57,12 +63,16 @@
         "title": "Open with Markdown Live Render"
       },
       {
+        "command": "markdownLiveRender.openWithFromExplorer",
+        "title": "Open Rendered (Markdown Live)"
+      },
+      {
         "command": "markdownLiveRender.openAsText",
         "title": "Open Markdown as Raw Text"
       },
       {
         "command": "markdownLiveRender.toggle",
-        "title": "Toggle Markdown Rendered/Raw View"
+        "title": "Toggle Rendered/Raw Markdown"
       }
     ],
     "keybindings": [

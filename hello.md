@@ -41,5 +41,24 @@ Spring awakens slow
 
 <br />
 
-<br />
+## Vegetable Checklist
 
+* [ ] Broccoli
+
+* [ ] Carrots
+
+* [ ] Spinach
+
+* [ ] Bell Peppers
+
+* [ ] Tomatoes
+
+* [ ] Zucchini
+
+* [ ] Cauliflower
+
+* [ ] Asparagus
+
+* [ ] Green Beans
+
+* [ ] Kale
