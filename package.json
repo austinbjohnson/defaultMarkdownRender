@@ -28,17 +28,10 @@
             "filenamePattern": "*.md"
           }
         ],
-        "priority": "option"
+        "priority": "default"
       }
     ],
     "menus": {
-      "explorer/context": [
-        {
-          "command": "markdownLiveRender.openWithFromExplorer",
-          "when": "resourceExtname == .md",
-          "group": "navigation"
-        }
-      ],
       "editor/title/context": [
         {
           "command": "markdownLiveRender.toggle",
@@ -57,14 +50,15 @@
         }
       }
     },
+    "configurationDefaults": {
+      "workbench.editorAssociations": {
+        "*.md": "markdownLiveRender.editor"
+      }
+    },
     "commands": [
       {
         "command": "markdownLiveRender.openWith",
         "title": "Open with Markdown Live Render"
-      },
-      {
-        "command": "markdownLiveRender.openWithFromExplorer",
-        "title": "Open Rendered (Markdown Live)"
       },
       {
         "command": "markdownLiveRender.openAsText",

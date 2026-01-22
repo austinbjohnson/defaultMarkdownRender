@@ -6,14 +6,33 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
   private syncManagers = new Map<string, SyncManager>();
   private lastSentContent = new Map<string, string>();
+  private diffTracker: Set<string>;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    diffTracker?: Set<string>
+  ) {
+    this.diffTracker = diffTracker || new Set();
+  }
 
   public async resolveCustomTextEditor(
     document: vscode.TextDocument,
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
+    // Check if this document is part of a diff view - if so, use raw text editor instead
+    // This allows AI-generated diffs to show properly
+    const docUri = document.uri.toString();
+    const scheme = document.uri.scheme;
+    
+    // Non-file schemes (git:, untitled:, vscode-diff:, etc.) often indicate diff/comparison views
+    // Also check our tracked diff URIs
+    if (scheme !== 'file' || this.diffTracker.has(docUri)) {
+      // Close this panel and let VS Code use the default text editor
+      webviewPanel.dispose();
+      return;
+    }
+
     // Set up webview options
     webviewPanel.webview.options = {
       enableScripts: true,

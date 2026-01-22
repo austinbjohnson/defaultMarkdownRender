@@ -8,8 +8,11 @@ export function activate(context: vscode.ExtensionContext) {
     return;
   }
 
-  // Register the custom editor provider
-  const provider = new MarkdownEditorProvider(context);
+  // Track URIs that are currently in a diff view - these should use raw text
+  const urisInDiffView = new Set<string>();
+
+  // Register the custom editor provider with access to diff tracking
+  const provider = new MarkdownEditorProvider(context, urisInDiffView);
 
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
@@ -24,6 +27,30 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Monitor tabs to track which files are in diff views
+  const updateDiffTracking = () => {
+    urisInDiffView.clear();
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        if (tab.input instanceof vscode.TabInputTextDiff) {
+          // Track both sides of the diff
+          urisInDiffView.add(tab.input.original.toString());
+          urisInDiffView.add(tab.input.modified.toString());
+        }
+      }
+    }
+  };
+
+  // Initial scan
+  updateDiffTracking();
+
+  // Update when tabs change
+  context.subscriptions.push(
+    vscode.window.tabGroups.onDidChangeTabs(() => {
+      updateDiffTracking();
+    })
+  );
+
   // Register command to open file with this editor (from command palette)
   context.subscriptions.push(
     vscode.commands.registerCommand('markdownLiveRender.openWith', async () => {
@@ -36,19 +63,6 @@ export function activate(context: vscode.ExtensionContext) {
         );
       } else {
         vscode.window.showInformationMessage('Open a markdown file first');
-      }
-    })
-  );
-
-  // Register command to open from explorer context menu
-  context.subscriptions.push(
-    vscode.commands.registerCommand('markdownLiveRender.openWithFromExplorer', async (uri: vscode.Uri) => {
-      if (uri && uri.fsPath.endsWith('.md')) {
-        await vscode.commands.executeCommand(
-          'vscode.openWith',
-          uri,
-          MarkdownEditorProvider.viewType
-        );
       }
     })
   );
