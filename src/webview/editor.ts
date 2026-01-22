@@ -46,7 +46,38 @@ let isUpdatingFromExtension = false;
 let currentVersion = 0;
 let pendingUpdate: string | null = null;
 let updateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-const UPDATE_DEBOUNCE_MS = 50; // Debounce rapid updates (AI streaming)
+const UPDATE_DEBOUNCE_MS = 30; // Debounce rapid updates (AI streaming)
+const USER_IDLE_BEFORE_EXTERNAL_APPLY_MS = 150; // Buffer external updates while user is actively typing
+let lastLocalEditAt = 0;
+
+// Outgoing edit debounce (batch rapid keystrokes into one message)
+let pendingOutgoingEdit: string | null = null;
+let outgoingEditTimer: ReturnType<typeof setTimeout> | null = null;
+const OUTGOING_EDIT_DEBOUNCE_MS = 16; // ~1 frame at 60fps
+
+// Cache last known markdown to avoid expensive getMarkdown() calls
+let lastKnownMarkdown: string = '';
+
+function normalizeMarkdownForCompare(markdown: string): string {
+  // Normalize line endings to reduce false mismatches between VS Code and Milkdown outputs.
+  return markdown.replace(/\r\n/g, '\n');
+}
+
+function sendOutgoingEdit(markdown: string) {
+  pendingOutgoingEdit = markdown;
+  if (outgoingEditTimer) {
+    clearTimeout(outgoingEditTimer);
+  }
+  outgoingEditTimer = setTimeout(() => {
+    if (pendingOutgoingEdit !== null) {
+      vscode.postMessage({
+        type: 'edit',
+        content: pendingOutgoingEdit,
+      });
+      pendingOutgoingEdit = null;
+    }
+  }, OUTGOING_EDIT_DEBOUNCE_MS);
+}
 
 // Toolbar action handlers
 function runCommand(command: ReturnType<typeof callCommand>) {
@@ -367,6 +398,19 @@ function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     const isMod = e.metaKey || e.ctrlKey;
 
+    // Track active typing to avoid applying external updates mid-keystroke.
+    // This is intentionally broad (covers fast typing, backspace, enter).
+    const target = e.target as HTMLElement | null;
+    const isInEditor = Boolean(target && target.closest && target.closest('.ProseMirror'));
+    if (
+      isInEditor &&
+      !isMod &&
+      !e.altKey &&
+      (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter' || e.key === 'Delete')
+    ) {
+      lastLocalEditAt = Date.now();
+    }
+
     if (isMod && e.key === 'b') {
       e.preventDefault();
       e.stopPropagation();
@@ -428,16 +472,17 @@ async function initializeEditor(content: string) {
   const editorContainer = document.getElementById('editor');
   if (!editorContainer) return;
 
+  lastKnownMarkdown = content;
+
   editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, editorContainer);
       ctx.set(defaultValueCtx, content);
       ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
         if (!isUpdatingFromExtension && markdown !== prevMarkdown) {
-          vscode.postMessage({
-            type: 'edit',
-            content: markdown,
-          });
+          lastLocalEditAt = Date.now();
+          lastKnownMarkdown = markdown;
+          sendOutgoingEdit(markdown);
         }
       });
     })
@@ -472,62 +517,60 @@ async function updateEditorContent(content: string) {
 
 function applyPendingUpdate() {
   if (!editor || pendingUpdate === null) return;
-  
+
+  // Avoid applying external updates while the user is actively typing.
+  // Applying replaceAll mid-typing can reset selection and cause the cursor to "jump".
+  const msSinceLocalEdit = Date.now() - lastLocalEditAt;
+  if (msSinceLocalEdit < USER_IDLE_BEFORE_EXTERNAL_APPLY_MS) {
+    if (updateDebounceTimer) {
+      clearTimeout(updateDebounceTimer);
+    }
+    updateDebounceTimer = setTimeout(
+      applyPendingUpdate,
+      USER_IDLE_BEFORE_EXTERNAL_APPLY_MS - msSinceLocalEdit
+    );
+    return;
+  }
+
   const content = pendingUpdate;
   pendingUpdate = null;
   
-  // Get current markdown from editor to check if update is needed
-  let currentMarkdown = '';
-  try {
-    editor.action((ctx) => {
-      currentMarkdown = getMarkdown()(ctx);
-    });
-  } catch (e) {
-    // If we can't get current markdown, proceed with update
-  }
+  // Fast-path: use cached markdown for comparison (avoids expensive getMarkdown() call)
+  const normalizedContent = normalizeMarkdownForCompare(content);
+  const normalizedCached = normalizeMarkdownForCompare(lastKnownMarkdown);
   
-  // Skip update if content is identical (avoids unnecessary work)
-  if (currentMarkdown === content) {
+  // Quick length check before full string compare
+  if (normalizedContent.length === normalizedCached.length && normalizedContent === normalizedCached) {
     return;
   }
   
   isUpdatingFromExtension = true;
   
-  // Save cursor position before update
-  let savedSelection: { anchor: number; head: number } | null = null;
+  // Batch all operations into a single editor.action() for better performance
   try {
     editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
-      const { anchor, head } = view.state.selection;
-      savedSelection = { anchor, head };
+      
+      // Save cursor position
+      const { anchor } = view.state.selection;
+      
+      // Apply content update via replaceAll
+      replaceAll(content)(ctx);
+      
+      // Update cache
+      lastKnownMarkdown = content;
+      
+      // Restore cursor position (clamped to valid range)
+      try {
+        const newView = ctx.get(editorViewCtx);
+        const docLength = newView.state.doc.content.size;
+        const clampedAnchor = Math.min(Math.max(1, anchor), docLength - 1);
+        const newSelection = TextSelection.create(newView.state.doc, clampedAnchor);
+        newView.dispatch(newView.state.tr.setSelection(newSelection));
+      } catch {
+        // If selection restoration fails, that's okay
+      }
     });
-  } catch (e) {
-    // If we can't get selection, proceed without it
-  }
-  
-  // Use replaceAll to update content without recreating editor
-  // This is much faster and preserves editor state better
-  try {
-    editor.action(replaceAll(content));
-    
-    // Restore cursor position if valid
-    if (savedSelection) {
-      editor.action((ctx) => {
-        try {
-          const view = ctx.get(editorViewCtx);
-          const docLength = view.state.doc.content.size;
-          
-          // Clamp selection to valid range (ensure within document bounds)
-          const anchor = Math.min(Math.max(1, savedSelection!.anchor), docLength - 1);
-          
-          // Create and apply new selection
-          const newSelection = TextSelection.create(view.state.doc, anchor);
-          view.dispatch(view.state.tr.setSelection(newSelection));
-        } catch (e) {
-          // If selection restoration fails, that's okay - cursor will be at start
-        }
-      });
-    }
   } catch (e) {
     console.warn('replaceAll failed, falling back to re-initialization:', e);
     // Fallback: reinitialize if replaceAll fails
@@ -541,16 +584,16 @@ async function reinitializeEditor(content: string) {
   const editorContainer = document.getElementById('editor');
   if (editorContainer) {
     editorContainer.innerHTML = '';
+    lastKnownMarkdown = content;
     editor = await Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, editorContainer);
         ctx.set(defaultValueCtx, content);
         ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
           if (!isUpdatingFromExtension && markdown !== prevMarkdown) {
-            vscode.postMessage({
-              type: 'edit',
-              content: markdown,
-            });
+            lastLocalEditAt = Date.now();
+            lastKnownMarkdown = markdown;
+            sendOutgoingEdit(markdown);
           }
         });
       })
