@@ -517,8 +517,9 @@ function getSlashQuery(): string {
     const { state } = view;
     const { from } = state.selection;
 
-    if (slashTriggerPos < from) {
-      query = state.doc.textBetween(slashTriggerPos + 1, from);
+    // +2 to skip the "//"
+    if (slashTriggerPos + 2 <= from) {
+      query = state.doc.textBetween(slashTriggerPos + 2, from);
     }
   });
   return query;
@@ -725,43 +726,17 @@ async function initializeEditor(content: string) {
 function setupSlashCommands() {
   if (!editor) return;
 
-  // Monitor for slash input and update menu
-  const editorEl = document.querySelector('.ProseMirror');
-  if (!editorEl) return;
-
-  editorEl.addEventListener('input', () => {
-    if (!editor) return;
-
-    editor.action((ctx) => {
-      const view = ctx.get(editorViewCtx);
-      const { state } = view;
-      const { from } = state.selection;
-
-      // Get the character before cursor
-      if (from <= 0) return;
-
-      const textBefore = state.doc.textBetween(Math.max(0, from - 20), from);
-
-      // Check if we should trigger slash menu
-      // Trigger: "/" at start of line or after whitespace
-      const slashMatch = textBefore.match(/(?:^|\s)(\/[a-zA-Z0-9]*)$/);
-
-      if (slashMatch) {
-        const slashIndex = from - slashMatch[1].length;
-        const query = slashMatch[1].slice(1); // Remove the "/"
-
-        if (slashTriggerPos === null) {
-          slashTriggerPos = slashIndex;
-        }
-
-        const coords = getCursorCoords();
-        if (coords) {
-          showSlashMenu(coords.x, coords.y, query);
-        }
-      } else if (slashMenuVisible) {
-        // No longer in a slash command context
-        hideSlashMenu();
-      }
+  // Use ProseMirror's transaction handler for reliable input detection
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    
+    // Create a plugin-like handler via direct DOM event on the editor
+    const editorDOM = view.dom;
+    
+    editorDOM.addEventListener('input', () => {
+      setTimeout(() => {
+        checkForSlashTrigger();
+      }, 0);
     });
   });
 
@@ -769,6 +744,47 @@ function setupSlashCommands() {
   document.addEventListener('click', (e) => {
     const menu = document.getElementById('slash-menu');
     if (menu && slashMenuVisible && !menu.contains(e.target as Node)) {
+      hideSlashMenu();
+    }
+  });
+}
+
+function checkForSlashTrigger() {
+  if (!editor) return;
+
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const { state } = view;
+    const { from } = state.selection;
+
+    // Get text before cursor (up to 30 chars to catch "//query")
+    if (from <= 1) {
+      if (slashMenuVisible) hideSlashMenu();
+      return;
+    }
+
+    const startPos = Math.max(0, from - 30);
+    const textBefore = state.doc.textBetween(startPos, from);
+
+    // Trigger on "//" at start of line or after whitespace
+    // Match: // followed by optional alphanumeric query
+    const slashMatch = textBefore.match(/(?:^|\s)(\/\/[a-zA-Z0-9]*)$/);
+
+    if (slashMatch) {
+      const fullMatch = slashMatch[1]; // e.g., "//h1"
+      const matchStart = from - fullMatch.length;
+      const query = fullMatch.slice(2); // Remove the "//"
+
+      if (slashTriggerPos === null) {
+        slashTriggerPos = matchStart;
+      }
+
+      const coords = getCursorCoords();
+      if (coords) {
+        showSlashMenu(coords.x, coords.y, query);
+      }
+    } else if (slashMenuVisible) {
+      // No longer in a slash command context
       hideSlashMenu();
     }
   });
