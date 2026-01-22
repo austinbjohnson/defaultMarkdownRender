@@ -27,42 +27,16 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // Monitor tabs to track which files are in diff views and close custom editors for them
-  const updateDiffTracking = async () => {
+  // Monitor tabs to track which files are in diff views
+  const updateDiffTracking = () => {
     urisInDiffView.clear();
-    const customEditorsToClose: vscode.Tab[] = [];
-
     for (const group of vscode.window.tabGroups.all) {
       for (const tab of group.tabs) {
         if (tab.input instanceof vscode.TabInputTextDiff) {
           // Track both sides of the diff
-          const originalUri = tab.input.original.toString();
-          const modifiedUri = tab.input.modified.toString();
-          urisInDiffView.add(originalUri);
-          urisInDiffView.add(modifiedUri);
+          urisInDiffView.add(tab.input.original.toString());
+          urisInDiffView.add(tab.input.modified.toString());
         }
-      }
-    }
-
-    // Now find and close any custom editors that are showing files in diff views
-    for (const group of vscode.window.tabGroups.all) {
-      for (const tab of group.tabs) {
-        if (
-          tab.input instanceof vscode.TabInputCustom &&
-          tab.input.viewType === MarkdownEditorProvider.viewType &&
-          urisInDiffView.has(tab.input.uri.toString())
-        ) {
-          customEditorsToClose.push(tab);
-        }
-      }
-    }
-
-    // Close custom editors that conflict with diffs
-    for (const tab of customEditorsToClose) {
-      try {
-        await vscode.window.tabGroups.close(tab);
-      } catch {
-        // Tab may already be closed
       }
     }
   };

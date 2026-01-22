@@ -15,26 +15,6 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     this.diffTracker = diffTracker || new Set();
   }
 
-  /**
-   * Check if a URI is currently displayed in a diff/compare editor
-   * by scanning all open tabs for TabInputTextDiff instances
-   */
-  private isInDiffContext(uriString: string): boolean {
-    for (const group of vscode.window.tabGroups.all) {
-      for (const tab of group.tabs) {
-        if (tab.input instanceof vscode.TabInputTextDiff) {
-          if (
-            tab.input.original.toString() === uriString ||
-            tab.input.modified.toString() === uriString
-          ) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
-
   public async resolveCustomTextEditor(
     document: vscode.TextDocument,
     webviewPanel: vscode.WebviewPanel,
@@ -46,24 +26,12 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     const scheme = document.uri.scheme;
     
     // Non-file schemes (git:, untitled:, vscode-diff:, etc.) often indicate diff/comparison views
-    if (scheme !== 'file') {
+    // Also check our tracked diff URIs
+    if (scheme !== 'file' || this.diffTracker.has(docUri)) {
+      // Close this panel and let VS Code use the default text editor
       webviewPanel.dispose();
       return;
     }
-
-    // Check if already tracked as being in a diff
-    if (this.diffTracker.has(docUri)) {
-      webviewPanel.dispose();
-      return;
-    }
-
-    // Delayed check: VS Code may not have registered the diff tab yet when resolveCustomTextEditor runs
-    // Wait a tick and check again if this file ended up in a diff view
-    setTimeout(() => {
-      if (webviewPanel.visible && this.isInDiffContext(docUri)) {
-        webviewPanel.dispose();
-      }
-    }, 100);
 
     // Set up webview options
     webviewPanel.webview.options = {
