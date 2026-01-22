@@ -32,6 +32,165 @@ import { nord } from '@milkdown/theme-nord';
 // Import our VS Code theme-aware styles (NOT the Nord CSS)
 import './styles.css';
 
+// ==========================================================================
+// Simple browser-compatible YAML frontmatter parser
+// (gray-matter requires Node.js, so we roll our own for the webview)
+// ==========================================================================
+
+function parseYamlValue(value: string): unknown {
+  const trimmed = value.trim();
+  
+  // Boolean
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
+  
+  // Null
+  if (trimmed === 'null' || trimmed === '~' || trimmed === '') return null;
+  
+  // Number
+  if (/^-?\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+  if (/^-?\d+\.\d+$/.test(trimmed)) return parseFloat(trimmed);
+  
+  // Quoted string - remove quotes
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  
+  // Inline array [a, b, c]
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    const inner = trimmed.slice(1, -1);
+    if (inner.trim() === '') return [];
+    return inner.split(',').map(item => parseYamlValue(item));
+  }
+  
+  // Plain string
+  return trimmed;
+}
+
+function parseSimpleYaml(yamlString: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const lines = yamlString.split('\n');
+  
+  let currentKey: string | null = null;
+  let currentArray: unknown[] | null = null;
+  let multilineValue: string[] | null = null;
+  let multilineIndent = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmedLine = line.trim();
+    
+    // Skip empty lines and comments (but preserve in multiline)
+    if (trimmedLine === '' || trimmedLine.startsWith('#')) {
+      if (multilineValue !== null) {
+        multilineValue.push('');
+      }
+      continue;
+    }
+    
+    // Check for multiline continuation
+    if (multilineValue !== null) {
+      const currentIndent = line.search(/\S/);
+      if (currentIndent > multilineIndent || (currentIndent === -1)) {
+        multilineValue.push(trimmedLine);
+        continue;
+      } else {
+        // End multiline
+        if (currentKey) {
+          result[currentKey] = multilineValue.join('\n');
+        }
+        multilineValue = null;
+        currentKey = null;
+      }
+    }
+    
+    // Check for array item (- value)
+    if (trimmedLine.startsWith('- ')) {
+      if (currentArray !== null && currentKey) {
+        currentArray.push(parseYamlValue(trimmedLine.slice(2)));
+      }
+      continue;
+    }
+    
+    // Check for key: value
+    const colonIndex = trimmedLine.indexOf(':');
+    if (colonIndex > 0) {
+      // Save previous array if any
+      if (currentArray !== null && currentKey) {
+        result[currentKey] = currentArray;
+        currentArray = null;
+      }
+      
+      const key = trimmedLine.slice(0, colonIndex).trim();
+      const valueStr = trimmedLine.slice(colonIndex + 1).trim();
+      
+      currentKey = key;
+      
+      // Check for multiline indicators
+      if (valueStr === '|' || valueStr === '>') {
+        multilineValue = [];
+        multilineIndent = line.search(/\S/);
+        continue;
+      }
+      
+      // Check if this starts an array (empty value followed by - items)
+      if (valueStr === '') {
+        // Peek ahead to see if next non-empty line is an array item
+        let nextIdx = i + 1;
+        while (nextIdx < lines.length && lines[nextIdx].trim() === '') {
+          nextIdx++;
+        }
+        if (nextIdx < lines.length && lines[nextIdx].trim().startsWith('- ')) {
+          currentArray = [];
+          continue;
+        }
+        // Otherwise it's null/empty
+        result[key] = null;
+        continue;
+      }
+      
+      // Regular value
+      result[key] = parseYamlValue(valueStr);
+      currentKey = null;
+    }
+  }
+  
+  // Handle trailing array
+  if (currentArray !== null && currentKey) {
+    result[currentKey] = currentArray;
+  }
+  
+  // Handle trailing multiline
+  if (multilineValue !== null && currentKey) {
+    result[currentKey] = multilineValue.join('\n');
+  }
+  
+  return result;
+}
+
+function parseFrontmatter(markdown: string): { data: Record<string, unknown>; content: string; raw: string } {
+  // Check for frontmatter delimiter at the start
+  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+  const match = markdown.match(frontmatterRegex);
+  
+  if (match) {
+    const yamlContent = match[1];
+    const raw = match[0];
+    const content = markdown.slice(raw.length);
+    
+    try {
+      const data = parseSimpleYaml(yamlContent);
+      return { data, content, raw };
+    } catch (e) {
+      console.warn('Failed to parse YAML frontmatter:', e);
+      return { data: {}, content: markdown, raw: '' };
+    }
+  }
+  
+  return { data: {}, content: markdown, raw: '' };
+}
+
 // Acquire VS Code API
 declare function acquireVsCodeApi(): {
   postMessage(message: unknown): void;
@@ -57,6 +216,11 @@ const OUTGOING_EDIT_DEBOUNCE_MS = 16; // ~1 frame at 60fps
 
 // Cache last known markdown to avoid expensive getMarkdown() calls
 let lastKnownMarkdown: string = '';
+
+// Frontmatter state
+let currentFrontmatter: Record<string, unknown> = {};
+let rawFrontmatterString: string = ''; // The original frontmatter including delimiters
+let frontmatterCollapsed: boolean = false;
 
 // Slash command state
 let slashMenuVisible = false;
@@ -540,6 +704,162 @@ function getCursorCoords(): { x: number; y: number } | null {
   return coords;
 }
 
+// ==========================================================================
+// Frontmatter Panel
+// ==========================================================================
+
+function extractFrontmatter(markdown: string): { frontmatter: Record<string, unknown>; body: string; raw: string } {
+  try {
+    const parsed = parseFrontmatter(markdown);
+    const hasFrontmatter = Object.keys(parsed.data).length > 0;
+    
+    if (hasFrontmatter) {
+      return {
+        frontmatter: parsed.data,
+        body: parsed.content,
+        raw: parsed.raw
+      };
+    }
+    
+    return { frontmatter: {}, body: markdown, raw: '' };
+  } catch (e) {
+    // If parsing fails, return original markdown as body
+    console.warn('Failed to parse frontmatter:', e);
+    return { frontmatter: {}, body: markdown, raw: '' };
+  }
+}
+
+function renderFrontmatterValue(value: unknown, indent: number = 0): string {
+  const indentStr = '  '.repeat(indent);
+  
+  if (value === null || value === undefined) {
+    return `<span class="fm-null">null</span>`;
+  }
+  
+  if (typeof value === 'boolean') {
+    return `<span class="fm-boolean">${value}</span>`;
+  }
+  
+  if (typeof value === 'number') {
+    return `<span class="fm-number">${value}</span>`;
+  }
+  
+  if (typeof value === 'string') {
+    // Check if it's a multi-line string
+    if (value.includes('\n')) {
+      const lines = value.split('\n').map(line => 
+        `<div class="fm-multiline-line">${escapeHtml(line) || '&nbsp;'}</div>`
+      ).join('');
+      return `<div class="fm-multiline">${lines}</div>`;
+    }
+    return `<span class="fm-string">${escapeHtml(value)}</span>`;
+  }
+  
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return `<span class="fm-array-empty">[]</span>`;
+    }
+    const items = value.map(item => 
+      `<div class="fm-array-item">${renderFrontmatterValue(item, indent + 1)}</div>`
+    ).join('');
+    return `<div class="fm-array">${items}</div>`;
+  }
+  
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      return `<span class="fm-object-empty">{}</span>`;
+    }
+    const rows = entries.map(([k, v]) => 
+      `<div class="fm-nested-row">
+        <span class="fm-nested-key">${escapeHtml(k)}:</span>
+        ${renderFrontmatterValue(v, indent + 1)}
+      </div>`
+    ).join('');
+    return `<div class="fm-nested-object">${rows}</div>`;
+  }
+  
+  return `<span class="fm-unknown">${escapeHtml(String(value))}</span>`;
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderFrontmatterPanel() {
+  const panel = document.getElementById('frontmatter-panel');
+  const content = document.getElementById('frontmatter-content');
+  const count = document.getElementById('frontmatter-count');
+  
+  if (!panel || !content || !count) return;
+  
+  const keys = Object.keys(currentFrontmatter);
+  
+  if (keys.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  
+  panel.style.display = 'block';
+  count.textContent = `${keys.length} ${keys.length === 1 ? 'property' : 'properties'}`;
+  
+  // Render key-value pairs
+  const rows = keys.map(key => {
+    const value = currentFrontmatter[key];
+    return `
+      <div class="fm-row">
+        <div class="fm-key">${escapeHtml(key)}</div>
+        <div class="fm-value">${renderFrontmatterValue(value)}</div>
+      </div>
+    `;
+  }).join('');
+  
+  content.innerHTML = rows;
+  
+  // Update collapsed state
+  updateFrontmatterCollapseState();
+}
+
+function updateFrontmatterCollapseState() {
+  const panel = document.getElementById('frontmatter-panel');
+  const content = document.getElementById('frontmatter-content');
+  const chevron = panel?.querySelector('.frontmatter-chevron');
+  
+  if (!panel || !content || !chevron) return;
+  
+  if (frontmatterCollapsed) {
+    panel.classList.add('collapsed');
+    content.style.display = 'none';
+    chevron.textContent = '▶';
+  } else {
+    panel.classList.remove('collapsed');
+    content.style.display = 'block';
+    chevron.textContent = '▼';
+  }
+}
+
+function setupFrontmatterToggle() {
+  const toggle = document.getElementById('frontmatter-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      frontmatterCollapsed = !frontmatterCollapsed;
+      updateFrontmatterCollapseState();
+    });
+  }
+}
+
+function reconstructFullMarkdown(bodyMarkdown: string): string {
+  if (rawFrontmatterString) {
+    return rawFrontmatterString + bodyMarkdown;
+  }
+  return bodyMarkdown;
+}
+
 // Setup toolbar event listeners
 function setupToolbar() {
   document.getElementById('btn-bold')?.addEventListener('click', toggleBold);
@@ -697,17 +1017,28 @@ async function initializeEditor(content: string) {
   const editorContainer = document.getElementById('editor');
   if (!editorContainer) return;
 
+  // Extract frontmatter before initializing Milkdown
+  const { frontmatter, body, raw } = extractFrontmatter(content);
+  currentFrontmatter = frontmatter;
+  rawFrontmatterString = raw;
+  
+  // Render frontmatter panel (will hide if no frontmatter)
+  renderFrontmatterPanel();
+  setupFrontmatterToggle();
+
   lastKnownMarkdown = content;
 
   editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, editorContainer);
-      ctx.set(defaultValueCtx, content);
+      ctx.set(defaultValueCtx, body); // Pass only the body content to Milkdown
       ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
         if (!isUpdatingFromExtension && markdown !== prevMarkdown) {
           lastLocalEditAt = Date.now();
-          lastKnownMarkdown = markdown;
-          sendOutgoingEdit(markdown);
+          // Reconstruct full markdown with frontmatter for caching and sending
+          const fullMarkdown = reconstructFullMarkdown(markdown);
+          lastKnownMarkdown = fullMarkdown;
+          sendOutgoingEdit(fullMarkdown);
         }
       });
     })
@@ -837,6 +1168,14 @@ function applyPendingUpdate() {
     return;
   }
   
+  // Extract frontmatter from the new content
+  const { frontmatter, body, raw } = extractFrontmatter(content);
+  currentFrontmatter = frontmatter;
+  rawFrontmatterString = raw;
+  
+  // Re-render frontmatter panel
+  renderFrontmatterPanel();
+  
   isUpdatingFromExtension = true;
   
   // Batch all operations into a single editor.action() for better performance
@@ -847,10 +1186,10 @@ function applyPendingUpdate() {
       // Save cursor position
       const { anchor } = view.state.selection;
       
-      // Apply content update via replaceAll
-      replaceAll(content)(ctx);
+      // Apply content update via replaceAll (body only, without frontmatter)
+      replaceAll(body)(ctx);
       
-      // Update cache
+      // Update cache with full content
       lastKnownMarkdown = content;
       
       // Restore cursor position (clamped to valid range)
@@ -877,16 +1216,26 @@ async function reinitializeEditor(content: string) {
   const editorContainer = document.getElementById('editor');
   if (editorContainer) {
     editorContainer.innerHTML = '';
+    
+    // Extract frontmatter
+    const { frontmatter, body, raw } = extractFrontmatter(content);
+    currentFrontmatter = frontmatter;
+    rawFrontmatterString = raw;
+    
+    // Re-render frontmatter panel
+    renderFrontmatterPanel();
+    
     lastKnownMarkdown = content;
     editor = await Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, editorContainer);
-        ctx.set(defaultValueCtx, content);
+        ctx.set(defaultValueCtx, body); // Pass only the body content
         ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
           if (!isUpdatingFromExtension && markdown !== prevMarkdown) {
             lastLocalEditAt = Date.now();
-            lastKnownMarkdown = markdown;
-            sendOutgoingEdit(markdown);
+            const fullMarkdown = reconstructFullMarkdown(markdown);
+            lastKnownMarkdown = fullMarkdown;
+            sendOutgoingEdit(fullMarkdown);
           }
         });
       })

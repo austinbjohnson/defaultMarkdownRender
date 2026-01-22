@@ -1,3 +1,14 @@
+---
+title: Hello Document
+date: 2026-01-21
+author: ajohnson
+description: A sample markdown document for testing the VS Code plugin
+tags:
+  - markdown
+  - sample
+  - testing
+---
+
 # title
 
 this is a doc
