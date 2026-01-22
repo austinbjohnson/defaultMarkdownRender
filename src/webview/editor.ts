@@ -1,5 +1,6 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/core';
 import { TextSelection } from '@milkdown/prose/state';
+import { deleteRow as prosemirrorDeleteRow } from '@milkdown/prose/tables';
 import { 
   commonmark, 
   toggleStrongCommand, 
@@ -190,12 +191,11 @@ function addRowBelow() {
 }
 
 function deleteRow() {
-  // First select the current row, then delete selected cells
-  runCommand(callCommand(selectRowCommand.key, { index: -1 }));
-  // Small delay to ensure selection is applied before delete
-  setTimeout(() => {
-    runCommand(callCommand(deleteSelectedCellsCommand.key));
-  }, 10);
+  // Use ProseMirror's native deleteRow which operates on the row at current cursor position
+  const view = editor?.ctx.get(editorViewCtx);
+  if (view) {
+    prosemirrorDeleteRow(view.state, view.dispatch);
+  }
   hideContextMenu();
 }
 
