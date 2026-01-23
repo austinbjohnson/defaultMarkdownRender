@@ -1,12 +1,43 @@
 import * as vscode from 'vscode';
 import { MarkdownEditorProvider } from './markdownEditorProvider';
 
-export function activate(context: vscode.ExtensionContext) {
-  const config = vscode.workspace.getConfiguration('markdownLiveRender');
-
-  if (!config.get('enabled', true)) {
-    return;
+/**
+ * Updates the workbench.editorAssociations setting based on user preference.
+ * This determines whether .md files open in rendered view or raw source by default.
+ */
+async function updateEditorAssociation(defaultView: 'rendered' | 'source') {
+  const config = vscode.workspace.getConfiguration('workbench');
+  const associations = config.get<Record<string, string>>('editorAssociations') || {};
+  
+  const newAssociations = { ...associations };
+  
+  if (defaultView === 'rendered') {
+    newAssociations['*.md'] = 'markdownLiveRender.editor';
+  } else {
+    newAssociations['*.md'] = 'default';
   }
+  
+  if (associations['*.md'] !== newAssociations['*.md']) {
+    await config.update('editorAssociations', newAssociations, vscode.ConfigurationTarget.Global);
+  }
+}
+
+export function activate(context: vscode.ExtensionContext) {
+  // Get the user's preference for default view and set editor association
+  const config = vscode.workspace.getConfiguration('markdownLiveRender');
+  const defaultView = config.get<'rendered' | 'source'>('defaultView', 'rendered');
+  updateEditorAssociation(defaultView);
+  
+  // Listen for configuration changes to update the association dynamically
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('markdownLiveRender.defaultView')) {
+        const newConfig = vscode.workspace.getConfiguration('markdownLiveRender');
+        const newValue = newConfig.get<'rendered' | 'source'>('defaultView', 'rendered');
+        updateEditorAssociation(newValue);
+      }
+    })
+  );
 
   // Register the custom editor provider
   const provider = new MarkdownEditorProvider(context);
@@ -80,6 +111,22 @@ export function activate(context: vscode.ExtensionContext) {
           await vscode.commands.executeCommand('vscode.openWith', uri, MarkdownEditorProvider.viewType);
         }
       }
+    })
+  );
+
+  // Register command to toggle the default view setting from command palette
+  context.subscriptions.push(
+    vscode.commands.registerCommand('markdownLiveRender.toggleDefaultView', async () => {
+      const config = vscode.workspace.getConfiguration('markdownLiveRender');
+      const currentView = config.get<'rendered' | 'source'>('defaultView', 'rendered');
+      const newView = currentView === 'rendered' ? 'source' : 'rendered';
+      
+      await config.update('defaultView', newView, vscode.ConfigurationTarget.Global);
+      
+      const message = newView === 'rendered' 
+        ? 'Default: Rendered view (WYSIWYG)'
+        : 'Default: Raw source text';
+      vscode.window.showInformationMessage(`Markdown Live Render — ${message}`);
     })
   );
 
