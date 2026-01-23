@@ -733,10 +733,20 @@ function setupSlashCommands() {
     // Create a plugin-like handler via direct DOM event on the editor
     const editorDOM = view.dom;
     
+    // Listen for input events (most typing)
     editorDOM.addEventListener('input', () => {
       setTimeout(() => {
         checkForSlashTrigger();
       }, 0);
+    });
+    
+    // Also listen for keyup on "/" to catch the second slash immediately
+    editorDOM.addEventListener('keyup', (e) => {
+      if (e.key === '/') {
+        setTimeout(() => {
+          checkForSlashTrigger();
+        }, 0);
+      }
     });
   });
 
@@ -757,18 +767,20 @@ function checkForSlashTrigger() {
     const { state } = view;
     const { from } = state.selection;
 
-    // Get text before cursor (up to 30 chars to catch "//query")
-    if (from <= 1) {
+    // Need at least 2 characters for "//"
+    if (from < 2) {
       if (slashMenuVisible) hideSlashMenu();
       return;
     }
 
-    const startPos = Math.max(0, from - 30);
-    const textBefore = state.doc.textBetween(startPos, from);
+    // Get the text content of the current block/paragraph
+    const $from = state.selection.$from;
+    const startOfBlock = $from.start();
+    const textInBlock = state.doc.textBetween(startOfBlock, from);
 
-    // Trigger on "//" at start of line or after whitespace
+    // Trigger on "//" at start of block or after whitespace
     // Match: // followed by optional alphanumeric query
-    const slashMatch = textBefore.match(/(?:^|\s)(\/\/[a-zA-Z0-9]*)$/);
+    const slashMatch = textInBlock.match(/(?:^|\s)(\/\/[a-zA-Z0-9]*)$/);
 
     if (slashMatch) {
       const fullMatch = slashMatch[1]; // e.g., "//h1"
