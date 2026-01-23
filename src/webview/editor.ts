@@ -1,5 +1,6 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/core';
 import { TextSelection } from '@milkdown/prose/state';
+import { deleteRow as prosemirrorDeleteRow } from '@milkdown/prose/tables';
 import { 
   commonmark, 
   toggleStrongCommand, 
@@ -183,12 +184,12 @@ function addRowBelow() {
 }
 
 function deleteRow() {
-  // First select the current row, then delete selected cells
-  runCommand(callCommand(selectRowCommand.key, { index: -1 }));
-  // Small delay to ensure selection is applied before delete
-  setTimeout(() => {
-    runCommand(callCommand(deleteSelectedCellsCommand.key));
-  }, 10);
+  // Use ProseMirror's native deleteRow which operates on the row at current cursor position
+  const view = editor?.ctx.get(editorViewCtx);
+  if (view) {
+    const result = prosemirrorDeleteRow(view.state, view.dispatch);
+    console.log('deleteRow result:', result);
+  }
   hideContextMenu();
 }
 
@@ -589,9 +590,34 @@ function setupToolbar() {
   // Right-click on tables to show context menu
   document.getElementById('editor')?.addEventListener('contextmenu', (e) => {
     const target = e.target as HTMLElement;
-    // Check if we're inside a table
-    if (target.closest('table')) {
+    // Check if we're inside a table cell
+    const tableCell = target.closest('td, th');
+    if (tableCell) {
       e.preventDefault();
+      
+      // Position cursor at the click coordinates so delete/row operations work correctly
+      const view = editor?.ctx.get(editorViewCtx);
+      if (view) {
+        // Use click coordinates to find the exact position in the document
+        const posAtCoords = view.posAtCoords({ left: e.clientX, top: e.clientY });
+        if (posAtCoords) {
+          try {
+            const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, posAtCoords.pos));
+            view.dispatch(tr);
+          } catch (err) {
+            console.log('Selection error, trying near:', err);
+            // Fallback: use TextSelection.near for tricky positions
+            try {
+              const $pos = view.state.doc.resolve(posAtCoords.pos);
+              const tr = view.state.tr.setSelection(TextSelection.near($pos));
+              view.dispatch(tr);
+            } catch (err2) {
+              console.log('Near selection also failed:', err2);
+            }
+          }
+        }
+      }
+      
       showContextMenu(e.clientX, e.clientY);
     }
   });
