@@ -4,7 +4,7 @@
   "description": "WYSIWYG markdown editor with live sync for AI collaboration",
   "version": "0.1.0",
   "publisher": "ajohnson",
-  "icon": "media/logo_motion.jpg",
+  "icon": "media/logo_motion_square.jpg",
   "repository": {
     "type": "git",
     "url": "https://github.com/austinbjohnson/defaultMarkdownRender"
