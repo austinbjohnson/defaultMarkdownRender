@@ -78,7 +78,6 @@ const slashCommands: SlashCommand[] = [
   { id: 'h3', title: 'Heading 3', description: 'Small section heading', icon: 'H3', keywords: ['h3', 'heading'], action: () => setHeading(3) },
   { id: 'bullet', title: 'Bullet List', description: 'Create a simple bullet list', icon: '•', keywords: ['bullet', 'list', 'ul'], action: toggleBulletList },
   { id: 'numbered', title: 'Numbered List', description: 'Create a numbered list', icon: '1.', keywords: ['numbered', 'list', 'ol', 'ordered'], action: toggleOrderedList },
-  { id: 'todo', title: 'Task List', description: 'Create a to-do checklist', icon: '☐', keywords: ['todo', 'task', 'checkbox', 'check'], action: insertTaskList },
   { id: 'quote', title: 'Blockquote', description: 'Capture a quote', icon: '❝', keywords: ['quote', 'blockquote'], action: toggleBlockquote },
   { id: 'code', title: 'Code Block', description: 'Add a code snippet', icon: '{ }', keywords: ['code', 'codeblock', 'snippet'], action: insertCodeBlock },
   { id: 'table', title: 'Table', description: 'Insert a 3×3 table', icon: '⊞', keywords: ['table', 'grid'], action: () => insertTable(3, 3) },
@@ -156,43 +155,6 @@ function toggleBlockquote() {
 
 function insertCodeBlock() {
   runCommand(callCommand(createCodeBlockCommand.key));
-}
-
-function insertTaskList() {
-  if (!editor) return;
-  
-  // Create a task list by inserting a bullet list with checked=false attribute
-  // The GFM preset extends list items to support the "checked" attribute
-  editor.action((ctx) => {
-    const view = ctx.get(editorViewCtx);
-    const { state, dispatch } = view;
-    const { schema, selection } = state;
-    const { from } = selection;
-    
-    // Get the list types from schema
-    const bulletListType = schema.nodes.bullet_list;
-    const listItemType = schema.nodes.list_item;
-    const paragraphType = schema.nodes.paragraph;
-    
-    if (!bulletListType || !listItemType || !paragraphType) {
-      console.warn('Required node types not found in schema');
-      return;
-    }
-    
-    // Create: bullet_list > list_item[checked=false] > paragraph
-    const paragraph = paragraphType.create();
-    const listItem = listItemType.create({ checked: false }, paragraph);
-    const bulletList = bulletListType.create(null, listItem);
-    
-    // Insert the task list at cursor position
-    const tr = state.tr.replaceSelectionWith(bulletList);
-    
-    // Move cursor inside the paragraph (after the checkbox)
-    const newPos = from + 3; // Account for list structure
-    tr.setSelection(TextSelection.create(tr.doc, newPos));
-    
-    dispatch(tr);
-  });
 }
 
 function insertLink() {
@@ -582,7 +544,6 @@ function setupToolbar() {
   document.getElementById('btn-h3')?.addEventListener('click', () => setHeading(3));
   document.getElementById('btn-bullet-list')?.addEventListener('click', toggleBulletList);
   document.getElementById('btn-ordered-list')?.addEventListener('click', toggleOrderedList);
-  document.getElementById('btn-task-list')?.addEventListener('click', insertTaskList);
   document.getElementById('btn-blockquote')?.addEventListener('click', toggleBlockquote);
   document.getElementById('btn-codeblock')?.addEventListener('click', insertCodeBlock);
   document.getElementById('btn-link')?.addEventListener('click', insertLink);
@@ -700,11 +661,6 @@ function setupKeyboardShortcuts() {
       } else {
         toggleInlineCode();
       }
-    } else if (isMod && e.shiftKey && e.key === 'l') {
-      // Cmd+Shift+L for task list
-      e.preventDefault();
-      e.stopPropagation();
-      insertTaskList();
     } else if (isMod && e.shiftKey && e.key === '.') {
       // Cmd+Shift+. for blockquote
       e.preventDefault();
