@@ -6,7 +6,9 @@ node_modules/**
 tsconfig.json
 esbuild.config.js
 **/*.map
-*.jpg
-*.jpeg
 hello.md
+# Exclude unused images but keep the extension icon
+media/icon_z_broccoli.png
+media/logo_motion.jpg
+media/zapier orange broccoli.jpg
 .claude/**
