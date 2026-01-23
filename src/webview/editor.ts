@@ -939,6 +939,11 @@ async function reinitializeEditor(content: string) {
       .use(history)
       .use(listener)
       .create();
+    
+    // Re-setup event handlers after reinitialization
+    setupToolbar();
+    setupKeyboardShortcuts();
+    setupSlashCommands();
   }
 }
 
