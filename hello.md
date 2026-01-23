@@ -35,20 +35,17 @@ Soft morning mist falls\
 Cherry blossoms drift downstream\
 Spring awakens slow
 
+<br />
+
+<br />
+
 | <br /> | <br /> | <br /> |
 | :----- | :----- | :----- |
 | <br /> | <br /> | <br /> |
 
-* <br />
-
-//
-
-- [ ] 
-
-//todo 
+<br />
 
 <br />
 
 <br />
 
-* [ ] 
