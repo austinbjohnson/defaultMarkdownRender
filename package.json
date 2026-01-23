@@ -16,7 +16,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [
@@ -28,22 +30,22 @@
             "filenamePattern": "*.md"
           }
         ],
-        "priority": "default"
+        "priority": "option"
       }
     ],
     "configuration": {
       "title": "Markdown Live Render",
       "properties": {
-        "markdownLiveRender.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable the live markdown renderer for this workspace"
+        "markdownLiveRender.defaultView": {
+          "type": "string",
+          "enum": ["rendered", "source"],
+          "enumDescriptions": [
+            "Open markdown files in the live rendered view (WYSIWYG editor)",
+            "Open markdown files as raw source text"
+          ],
+          "default": "rendered",
+          "description": "Choose how markdown files open by default. You can always switch views using Cmd+Shift+M (Mac) or Ctrl+Shift+M (Windows/Linux)."
         }
-      }
-    },
-    "configurationDefaults": {
-      "workbench.editorAssociations": {
-        "*.md": "markdownLiveRender.editor"
       }
     },
     "commands": [
@@ -58,6 +60,10 @@
       {
         "command": "markdownLiveRender.toggle",
         "title": "Toggle Markdown Rendered/Raw View"
+      },
+      {
+        "command": "markdownLiveRender.toggleDefaultView",
+        "title": "Markdown Live Render: Toggle Default View"
       }
     ],
     "keybindings": [
