@@ -159,9 +159,40 @@ function insertCodeBlock() {
 }
 
 function insertTaskList() {
-  // Task lists don't have a dedicated command, so we create a bullet list
-  // The user can type "[ ]" to convert to task list, or we insert the markdown directly
-  runCommand(callCommand(wrapInBulletListCommand.key));
+  if (!editor) return;
+  
+  // Create a task list by inserting a bullet list with checked=false attribute
+  // The GFM preset extends list items to support the "checked" attribute
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const { state, dispatch } = view;
+    const { schema, selection } = state;
+    const { from } = selection;
+    
+    // Get the list types from schema
+    const bulletListType = schema.nodes.bullet_list;
+    const listItemType = schema.nodes.list_item;
+    const paragraphType = schema.nodes.paragraph;
+    
+    if (!bulletListType || !listItemType || !paragraphType) {
+      console.warn('Required node types not found in schema');
+      return;
+    }
+    
+    // Create: bullet_list > list_item[checked=false] > paragraph
+    const paragraph = paragraphType.create();
+    const listItem = listItemType.create({ checked: false }, paragraph);
+    const bulletList = bulletListType.create(null, listItem);
+    
+    // Insert the task list at cursor position
+    const tr = state.tr.replaceSelectionWith(bulletList);
+    
+    // Move cursor inside the paragraph (after the checkbox)
+    const newPos = from + 3; // Account for list structure
+    tr.setSelection(TextSelection.create(tr.doc, newPos));
+    
+    dispatch(tr);
+  });
 }
 
 function insertLink() {
