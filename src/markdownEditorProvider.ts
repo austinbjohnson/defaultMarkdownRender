@@ -163,7 +163,6 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     <span class="toolbar-separator"></span>
     <button id="btn-bullet-list" title="Bullet List">• List</button>
     <button id="btn-ordered-list" title="Numbered List">1. List</button>
-    <button id="btn-task-list" title="Task List (Cmd+Shift+L)">☐</button>
     <span class="toolbar-separator"></span>
     <button id="btn-blockquote" title="Blockquote (Cmd+Shift+.)">❝</button>
     <button id="btn-codeblock" title="Code Block (Cmd+Shift+\`)">{ }</button>
