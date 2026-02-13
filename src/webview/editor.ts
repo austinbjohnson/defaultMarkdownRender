@@ -310,10 +310,15 @@ function renderFrontmatter(frontmatter: string | null) {
   container.style.display = 'block';
   const obj = parsed as Record<string, unknown>;
   const titleValue = typeof obj.title === 'string' ? obj.title.trim() : '';
-  const panelTitle = titleValue || 'no title here, just a reminder to say thank you to someone today';
+  const nameValue = typeof obj.name === 'string' ? obj.name.trim() : '';
+  const panelTitle =
+    titleValue ||
+    nameValue ||
+    'no title here, just a reminder to say thank you to someone today';
   if (labelEl) labelEl.textContent = panelTitle;
   const rest = { ...obj };
   delete rest.title;
+  delete rest.name;
   contentEl.innerHTML = `<div class="frontmatter-tree">${renderFrontmatterNode(rest, 0)}</div>`;
   contentEl.style.display = 'block';
   container.classList.remove('is-collapsed');
@@ -789,9 +794,9 @@ function getSlashQuery(): string {
     const { state } = view;
     const { from } = state.selection;
 
-    // +2 to skip the "//"
-    if (slashTriggerPos + 2 <= from) {
-      query = state.doc.textBetween(slashTriggerPos + 2, from);
+    // +1 to skip the "/"
+    if (slashTriggerPos + 1 <= from) {
+      query = state.doc.textBetween(slashTriggerPos + 1, from);
     }
   });
   return query;
@@ -1036,7 +1041,7 @@ function setupSlashCommands() {
       }, 0);
     });
     
-    // Also listen for keyup on "/" to catch the second slash immediately
+    // Also listen for keyup on "/" to catch trigger input immediately
     editorDOM.addEventListener('keyup', (e) => {
       if (e.key === '/') {
         setTimeout(() => {
@@ -1063,8 +1068,8 @@ function checkForSlashTrigger() {
     const { state } = view;
     const { from } = state.selection;
 
-    // Need at least 2 characters for "//"
-    if (from < 2) {
+    // Need at least 1 character for "/"
+    if (from < 1) {
       if (slashMenuVisible) hideSlashMenu();
       return;
     }
@@ -1074,14 +1079,14 @@ function checkForSlashTrigger() {
     const startOfBlock = $from.start();
     const textInBlock = state.doc.textBetween(startOfBlock, from);
 
-    // Trigger on "//" at start of block or after whitespace
-    // Match: // followed by optional alphanumeric query
-    const slashMatch = textInBlock.match(/(?:^|\s)(\/\/[a-zA-Z0-9]*)$/);
+    // Trigger on "/" at start of block or after whitespace
+    // Match: / followed by optional alphanumeric query
+    const slashMatch = textInBlock.match(/(?:^|\s)(\/[a-zA-Z0-9]*)$/);
 
     if (slashMatch) {
-      const fullMatch = slashMatch[1]; // e.g., "//h1"
+      const fullMatch = slashMatch[1]; // e.g., "/h1"
       const matchStart = from - fullMatch.length;
-      const query = fullMatch.slice(2); // Remove the "//"
+      const query = fullMatch.slice(1); // Remove the "/"
 
       if (slashTriggerPos === null) {
         slashTriggerPos = matchStart;

@@ -1,6 +1,6 @@
 ---
 name: "hello-skill"
-description: "Test fixture for skill-style YAML frontmatter rendering and round-trip stability."
+description: "meow"
 ---
 
 # Hello Skill
