@@ -28,8 +28,9 @@ import {
 } from '@milkdown/preset-gfm';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { history } from '@milkdown/plugin-history';
-import { callCommand, replaceAll, getMarkdown } from '@milkdown/utils';
+import { callCommand, replaceAll } from '@milkdown/utils';
 import { nord } from '@milkdown/theme-nord';
+import yaml from 'js-yaml';
 // Import our VS Code theme-aware styles (NOT the Nord CSS)
 import './styles.css';
 
@@ -50,6 +51,17 @@ let updateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 const UPDATE_DEBOUNCE_MS = 30; // Debounce rapid updates (AI streaming)
 const USER_IDLE_BEFORE_EXTERNAL_APPLY_MS = 150; // Buffer external updates while user is actively typing
 let lastLocalEditAt = 0;
+let currentFrontmatter: string | null = null;
+let currentFrontmatterRawBlock: string | null = null;
+let frontmatterToggleInitialized = false;
+
+const FRONTMATTER_REGEX = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n)?/;
+
+type FrontmatterExtractionResult = {
+  frontmatter: string | null;
+  rawBlock: string | null;
+  content: string;
+};
 
 // Outgoing edit debounce (batch rapid keystrokes into one message)
 let pendingOutgoingEdit: string | null = null;
@@ -93,6 +105,208 @@ const slashCommands: SlashCommand[] = [
 function normalizeMarkdownForCompare(markdown: string): string {
   // Normalize line endings to reduce false mismatches between VS Code and Milkdown outputs.
   return markdown.replace(/\r\n/g, '\n');
+}
+
+function extractFrontmatter(markdown: string): FrontmatterExtractionResult {
+  const match = markdown.match(FRONTMATTER_REGEX);
+  if (!match) {
+    return { frontmatter: null, rawBlock: null, content: markdown };
+  }
+
+  const frontmatterText = match[1];
+  try {
+    const parsed = yaml.load(frontmatterText);
+    if (!parsed || typeof parsed !== 'object') {
+      return { frontmatter: null, rawBlock: null, content: markdown };
+    }
+  } catch {
+    return { frontmatter: null, rawBlock: null, content: markdown };
+  }
+
+  return {
+    frontmatter: frontmatterText,
+    rawBlock: match[0],
+    content: markdown.slice(match[0].length),
+  };
+}
+
+function combineFrontmatter(rawBlock: string | null, content: string): string {
+  if (!rawBlock) {
+    return content;
+  }
+  return `${rawBlock}${content}`;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getScalarTypeClass(value: unknown): string {
+  if (value === null) return 'is-null';
+  if (value instanceof Date) return 'is-date';
+  switch (typeof value) {
+    case 'boolean':
+      return 'is-boolean';
+    case 'number':
+      return 'is-number';
+    case 'string':
+      return 'is-string';
+    default:
+      return 'is-unknown';
+  }
+}
+
+function formatScalar(value: unknown): string {
+  if (value === null) return 'null';
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string') return value;
+  return String(value);
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderFrontmatterScalar(value: unknown): string {
+  const typeClass = getScalarTypeClass(value);
+  const displayValue = escapeHtml(formatScalar(value));
+  return `<span class="frontmatter-value frontmatter-scalar ${typeClass}" title="${displayValue}">${displayValue}</span>`;
+}
+
+function renderFrontmatterArray(values: unknown[], depth: number): string {
+  if (values.length === 0) {
+    return '<div class="frontmatter-empty frontmatter-empty-array">[]</div>';
+  }
+
+  const indentClass = `depth-${Math.min(depth, 6)}`;
+  return values
+    .map((item) => {
+      const nested = isObjectRecord(item) || Array.isArray(item);
+      const itemValue = nested ? renderFrontmatterNode(item, depth + 1) : renderFrontmatterScalar(item);
+      return `<div class="frontmatter-array-item ${indentClass}">
+        <span class="frontmatter-bullet">-</span>
+        <div class="frontmatter-array-value">${itemValue}</div>
+      </div>`;
+    })
+    .join('');
+}
+
+function renderFrontmatterObject(obj: Record<string, unknown>, depth: number): string {
+  const entries = Object.entries(obj);
+  if (entries.length === 0) {
+    return '<div class="frontmatter-empty frontmatter-empty-object">{}</div>';
+  }
+
+  const indentClass = `depth-${Math.min(depth, 6)}`;
+  return entries
+    .map(([key, value]) => {
+      const nested = isObjectRecord(value) || Array.isArray(value);
+      const keyHtml = `<span class="frontmatter-key">${escapeHtml(key)}</span><span class="frontmatter-separator">:</span>`;
+
+      if (nested) {
+        return `<div class="frontmatter-property ${indentClass}">
+          <div class="frontmatter-property-row">${keyHtml}</div>
+          <div class="frontmatter-children">${renderFrontmatterNode(value, depth + 1)}</div>
+        </div>`;
+      }
+
+      return `<div class="frontmatter-property ${indentClass}">
+        <div class="frontmatter-property-row">${keyHtml}${renderFrontmatterScalar(value)}</div>
+      </div>`;
+    })
+    .join('');
+}
+
+function renderFrontmatterNode(value: unknown, depth: number): string {
+  if (Array.isArray(value)) {
+    return renderFrontmatterArray(value, depth);
+  }
+  if (isObjectRecord(value)) {
+    return renderFrontmatterObject(value, depth);
+  }
+  return renderFrontmatterScalar(value);
+}
+
+function renderFrontmatter(frontmatter: string | null) {
+  const container = document.getElementById('frontmatter-container');
+  const contentEl = document.getElementById('frontmatter-content');
+  if (!container || !contentEl) return;
+
+  currentFrontmatter = frontmatter;
+  if (!frontmatter) {
+    container.style.display = 'none';
+    contentEl.innerHTML = '';
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(frontmatter);
+  } catch {
+    parsed = null;
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    container.style.display = 'none';
+    contentEl.innerHTML = '';
+    return;
+  }
+
+  container.style.display = 'block';
+  contentEl.innerHTML = `<div class="frontmatter-tree">${renderFrontmatterNode(parsed, 0)}</div>`;
+}
+
+function setupFrontmatterToggle() {
+  if (frontmatterToggleInitialized) return;
+
+  const toggle = document.getElementById('frontmatter-toggle');
+  const content = document.getElementById('frontmatter-content');
+  const chevron = toggle?.querySelector('.frontmatter-chevron');
+
+  toggle?.addEventListener('click', () => {
+    if (!content || !chevron) return;
+    const isHidden = content.style.display === 'none';
+    content.style.display = isHidden ? 'block' : 'none';
+    chevron.textContent = isHidden ? '▼' : '▶';
+  });
+
+  frontmatterToggleInitialized = true;
+}
+
+function ensureNoFrontmatterInEditorContent(content: string, source: string): string {
+  if (!content.startsWith('---')) {
+    return content;
+  }
+
+  const extracted = extractFrontmatter(content);
+  if (extracted.rawBlock) {
+    console.warn(`Stripped leaked frontmatter before applying editor update from ${source}.`);
+    return extracted.content;
+  }
+  return content;
+}
+
+function sanitizeOutgoingMarkdown(markdown: string): string {
+  const extracted = extractFrontmatter(markdown);
+  if (!extracted.rawBlock) {
+    return markdown;
+  }
+
+  console.warn('Detected frontmatter-like block in editor output; stripping before recombine.');
+  return extracted.content;
+}
+
+function applyFrontmatterStateFromContent(markdown: string): string {
+  const extracted = extractFrontmatter(markdown);
+  currentFrontmatterRawBlock = extracted.rawBlock;
+  currentFrontmatter = extracted.frontmatter;
+  renderFrontmatter(currentFrontmatter);
+  return extracted.content;
 }
 
 function sendOutgoingEdit(markdown: string) {
@@ -710,17 +924,22 @@ async function initializeEditor(content: string) {
   const editorContainer = document.getElementById('editor');
   if (!editorContainer) return;
 
+  setupFrontmatterToggle();
+  const editorContent = applyFrontmatterStateFromContent(content);
+  const safeEditorContent = ensureNoFrontmatterInEditorContent(editorContent, 'initializeEditor');
   lastKnownMarkdown = content;
 
   editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, editorContainer);
-      ctx.set(defaultValueCtx, content);
+      ctx.set(defaultValueCtx, safeEditorContent);
       ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
         if (!isUpdatingFromExtension && markdown !== prevMarkdown) {
           lastLocalEditAt = Date.now();
-          lastKnownMarkdown = markdown;
-          sendOutgoingEdit(markdown);
+          const safeMarkdown = sanitizeOutgoingMarkdown(markdown);
+          const fullMarkdown = combineFrontmatter(currentFrontmatterRawBlock, safeMarkdown);
+          lastKnownMarkdown = fullMarkdown;
+          sendOutgoingEdit(fullMarkdown);
         }
       });
     })
@@ -850,11 +1069,11 @@ function applyPendingUpdate() {
     return;
   }
 
-  const content = pendingUpdate;
+  const fullContent = pendingUpdate;
   pendingUpdate = null;
   
   // Fast-path: use cached markdown for comparison (avoids expensive getMarkdown() call)
-  const normalizedContent = normalizeMarkdownForCompare(content);
+  const normalizedContent = normalizeMarkdownForCompare(fullContent);
   const normalizedCached = normalizeMarkdownForCompare(lastKnownMarkdown);
   
   // Quick length check before full string compare
@@ -863,6 +1082,8 @@ function applyPendingUpdate() {
   }
   
   isUpdatingFromExtension = true;
+  const editorContent = applyFrontmatterStateFromContent(fullContent);
+  const safeEditorContent = ensureNoFrontmatterInEditorContent(editorContent, 'applyPendingUpdate');
   
   // Batch all operations into a single editor.action() for better performance
   try {
@@ -873,10 +1094,10 @@ function applyPendingUpdate() {
       const { anchor } = view.state.selection;
       
       // Apply content update via replaceAll
-      replaceAll(content)(ctx);
+      replaceAll(safeEditorContent)(ctx);
       
       // Update cache
-      lastKnownMarkdown = content;
+      lastKnownMarkdown = fullContent;
       
       // Restore cursor position (clamped to valid range)
       try {
@@ -892,7 +1113,7 @@ function applyPendingUpdate() {
   } catch (e) {
     console.warn('replaceAll failed, falling back to re-initialization:', e);
     // Fallback: reinitialize if replaceAll fails
-    reinitializeEditor(content);
+    reinitializeEditor(fullContent);
   }
   
   isUpdatingFromExtension = false;
@@ -902,16 +1123,21 @@ async function reinitializeEditor(content: string) {
   const editorContainer = document.getElementById('editor');
   if (editorContainer) {
     editorContainer.innerHTML = '';
+    setupFrontmatterToggle();
+    const editorContent = applyFrontmatterStateFromContent(content);
+    const safeEditorContent = ensureNoFrontmatterInEditorContent(editorContent, 'reinitializeEditor');
     lastKnownMarkdown = content;
     editor = await Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, editorContainer);
-        ctx.set(defaultValueCtx, content);
+        ctx.set(defaultValueCtx, safeEditorContent);
         ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
           if (!isUpdatingFromExtension && markdown !== prevMarkdown) {
             lastLocalEditAt = Date.now();
-            lastKnownMarkdown = markdown;
-            sendOutgoingEdit(markdown);
+            const safeMarkdown = sanitizeOutgoingMarkdown(markdown);
+            const fullMarkdown = combineFrontmatter(currentFrontmatterRawBlock, safeMarkdown);
+            lastKnownMarkdown = fullMarkdown;
+            sendOutgoingEdit(fullMarkdown);
           }
         });
       })

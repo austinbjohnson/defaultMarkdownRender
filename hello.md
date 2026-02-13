@@ -1,24 +1,16 @@
-# title
+# Hello World
 
-this is a doc
+This file validates plain markdown rendering with no frontmatter.
 
-<br />
+## What Happens If I Do This
 
-## what happens if i do this
-
-<br />
-
-or just this
-
-<br />
+Regular markdown still renders in Milkdown.
 
 ## Haiku
 
 Soft morning mist falls\
 Cherry blossoms drift downstream\
 Spring awakens slow
-
-## Added by terminal
 
 ## Color Numbers
 
@@ -30,22 +22,4 @@ Spring awakens slow
 | Lavender  | 99     | #E6E6FA  |
 | Coral     | 56     | #FF7F50  |
 | Slate     | 23     | #708090  |
-
-Soft morning mist falls\
-Cherry blossoms drift downstream\
-Spring awakens slow
-
-<br />
-
-<br />
-
-| <br /> | <br /> | <br /> |
-| :----- | :----- | :----- |
-| <br /> | <br /> | <br /> |
-
-<br />
-
-<br />
-
-<br />
 

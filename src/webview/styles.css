@@ -240,6 +240,148 @@ html, body {
 }
 
 /* ==========================================================================
+   Frontmatter Panel
+   ========================================================================== */
+
+.frontmatter-container {
+  margin: 10px 20px 0;
+  border: 1px solid var(--vscode-editorWidget-border, #454545);
+  border-radius: 6px;
+  background-color: var(--vscode-editorWidget-background, #252526);
+  overflow: hidden;
+}
+
+.frontmatter-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  background-color: var(--vscode-sideBar-background, #252526);
+  border-bottom: 1px solid var(--vscode-editorWidget-border, #454545);
+}
+
+.frontmatter-header:hover {
+  background-color: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+.frontmatter-chevron {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+  width: 10px;
+}
+
+.frontmatter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vscode-editor-foreground, #d4d4d4);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.frontmatter-content {
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.frontmatter-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.frontmatter-property {
+  display: flex;
+  flex-direction: column;
+}
+
+.frontmatter-property-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.frontmatter-key {
+  color: var(--vscode-symbolIcon-propertyForeground, #9cdcfe);
+  font-weight: 600;
+}
+
+.frontmatter-separator {
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+  margin-right: 2px;
+}
+
+.frontmatter-value {
+  color: var(--vscode-editor-foreground, #d4d4d4);
+  overflow-wrap: anywhere;
+}
+
+.frontmatter-scalar {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frontmatter-scalar.is-number {
+  color: var(--vscode-debugTokenExpression-number, #b5cea8);
+}
+
+.frontmatter-scalar.is-boolean {
+  color: var(--vscode-debugTokenExpression-boolean, #569cd6);
+}
+
+.frontmatter-scalar.is-null {
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+  font-style: italic;
+}
+
+.frontmatter-scalar.is-date {
+  color: var(--vscode-debugTokenExpression-string, #ce9178);
+}
+
+.frontmatter-children {
+  margin-left: 16px;
+  border-left: 1px dashed var(--vscode-editorWidget-border, #454545);
+  padding-left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.frontmatter-array-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.frontmatter-bullet {
+  color: var(--vscode-symbolIcon-arrayForeground, #c586c0);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.frontmatter-array-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.frontmatter-empty {
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+  font-style: italic;
+}
+
+.depth-0 { margin-left: 0; }
+.depth-1 { margin-left: 8px; }
+.depth-2 { margin-left: 16px; }
+.depth-3 { margin-left: 24px; }
+.depth-4 { margin-left: 32px; }
+.depth-5 { margin-left: 40px; }
+.depth-6 { margin-left: 48px; }
+
+/* ==========================================================================
    Editor Container
    ========================================================================== */
 
