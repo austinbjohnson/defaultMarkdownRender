@@ -196,6 +196,13 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   <div id="slash-menu" class="slash-menu" style="display: none;">
     <div id="slash-menu-list"></div>
   </div>
+  <div id="frontmatter-container" class="frontmatter-container" style="display: none;">
+    <div class="frontmatter-header" id="frontmatter-toggle">
+      <span class="frontmatter-chevron">▶</span>
+      <span class="frontmatter-label">Frontmatter</span>
+    </div>
+    <div class="frontmatter-content" id="frontmatter-content" style="display: none;"></div>
+  </div>
   <div id="editor-container">
     <div id="editor"></div>
   </div>
