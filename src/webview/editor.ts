@@ -138,7 +138,12 @@ function combineFrontmatter(rawBlock: string | null, content: string): string {
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Date)
+  );
 }
 
 function getScalarTypeClass(value: unknown): string {
@@ -158,7 +163,11 @@ function getScalarTypeClass(value: unknown): string {
 
 function formatScalar(value: unknown): string {
   if (value === null) return 'null';
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) {
+    const iso = value.toISOString();
+    if (iso.endsWith('T00:00:00.000Z')) return iso.slice(0, 10);
+    return iso.replace(/\.\d{3}Z$/, 'Z');
+  }
   if (typeof value === 'string') return value;
   return String(value);
 }
@@ -172,13 +181,31 @@ function escapeHtml(input: string): string {
     .replace(/'/g, '&#39;');
 }
 
+const TAG_LIKE_KEYS = new Set(['tags', 'aliases']);
+
+function isTagLikeArray(key: string, value: unknown): value is string[] {
+  if (!TAG_LIKE_KEYS.has(key) || !Array.isArray(value)) return false;
+  return value.every((item) => typeof item === 'string');
+}
+
 function renderFrontmatterScalar(value: unknown): string {
   const typeClass = getScalarTypeClass(value);
   const displayValue = escapeHtml(formatScalar(value));
   return `<span class="frontmatter-value frontmatter-scalar ${typeClass}" title="${displayValue}">${displayValue}</span>`;
 }
 
-function renderFrontmatterArray(values: unknown[], depth: number): string {
+function renderFrontmatterChips(values: string[]): string {
+  if (values.length === 0) {
+    return '<div class="frontmatter-chips frontmatter-chips-empty"></div>';
+  }
+  const chips = values
+    .map((v) => escapeHtml(v))
+    .map((v) => `<span class="frontmatter-chip">${v}</span>`)
+    .join('');
+  return `<div class="frontmatter-chips">${chips}</div>`;
+}
+
+function renderFrontmatterArray(values: unknown[], depth: number, _key?: string): string {
   if (values.length === 0) {
     return '<div class="frontmatter-empty frontmatter-empty-array">[]</div>';
   }
@@ -208,15 +235,31 @@ function renderFrontmatterObject(obj: Record<string, unknown>, depth: number): s
       const nested = isObjectRecord(value) || Array.isArray(value);
       const keyHtml = `<span class="frontmatter-key">${escapeHtml(key)}</span><span class="frontmatter-separator">:</span>`;
 
+      if (isTagLikeArray(key, value)) {
+        return `<div class="frontmatter-property ${indentClass}">
+          <div class="frontmatter-row">
+            <div class="frontmatter-key-group">${keyHtml}</div>
+            <div class="frontmatter-value-group">${renderFrontmatterChips(value)}</div>
+          </div>
+        </div>`;
+      }
+
       if (nested) {
         return `<div class="frontmatter-property ${indentClass}">
-          <div class="frontmatter-property-row">${keyHtml}</div>
-          <div class="frontmatter-children">${renderFrontmatterNode(value, depth + 1)}</div>
+          <div class="frontmatter-row">
+            <div class="frontmatter-key-group">${keyHtml}</div>
+            <div class="frontmatter-value-group">
+              <div class="frontmatter-children">${renderFrontmatterNode(value, depth + 1)}</div>
+            </div>
+          </div>
         </div>`;
       }
 
       return `<div class="frontmatter-property ${indentClass}">
-        <div class="frontmatter-property-row">${keyHtml}${renderFrontmatterScalar(value)}</div>
+        <div class="frontmatter-row">
+          <div class="frontmatter-key-group">${keyHtml}</div>
+          <div class="frontmatter-value-group">${renderFrontmatterScalar(value)}</div>
+        </div>
       </div>`;
     })
     .join('');
@@ -235,12 +278,16 @@ function renderFrontmatterNode(value: unknown, depth: number): string {
 function renderFrontmatter(frontmatter: string | null) {
   const container = document.getElementById('frontmatter-container');
   const contentEl = document.getElementById('frontmatter-content');
+  const labelEl = document.querySelector('#frontmatter-toggle .frontmatter-label');
   if (!container || !contentEl) return;
 
   currentFrontmatter = frontmatter;
   if (!frontmatter) {
     container.style.display = 'none';
+    container.classList.remove('is-expanded', 'is-collapsed');
     contentEl.innerHTML = '';
+    const chevron = document.querySelector('#frontmatter-toggle .frontmatter-chevron');
+    if (chevron) chevron.textContent = '▶';
     return;
   }
 
@@ -253,12 +300,26 @@ function renderFrontmatter(frontmatter: string | null) {
 
   if (!parsed || typeof parsed !== 'object') {
     container.style.display = 'none';
+    container.classList.remove('is-expanded', 'is-collapsed');
     contentEl.innerHTML = '';
+    const chevron = document.querySelector('#frontmatter-toggle .frontmatter-chevron');
+    if (chevron) chevron.textContent = '▶';
     return;
   }
 
   container.style.display = 'block';
-  contentEl.innerHTML = `<div class="frontmatter-tree">${renderFrontmatterNode(parsed, 0)}</div>`;
+  const obj = parsed as Record<string, unknown>;
+  const titleValue = typeof obj.title === 'string' ? obj.title.trim() : '';
+  const panelTitle = titleValue || 'no title here, just a reminder to say thank you to someone today';
+  if (labelEl) labelEl.textContent = panelTitle;
+  const rest = { ...obj };
+  delete rest.title;
+  contentEl.innerHTML = `<div class="frontmatter-tree">${renderFrontmatterNode(rest, 0)}</div>`;
+  contentEl.style.display = 'block';
+  container.classList.remove('is-collapsed');
+  container.classList.add('is-expanded');
+  const chevron = document.querySelector('#frontmatter-toggle .frontmatter-chevron');
+  if (chevron) chevron.textContent = '▼';
 }
 
 function setupFrontmatterToggle() {
@@ -267,12 +328,15 @@ function setupFrontmatterToggle() {
   const toggle = document.getElementById('frontmatter-toggle');
   const content = document.getElementById('frontmatter-content');
   const chevron = toggle?.querySelector('.frontmatter-chevron');
+  const container = document.getElementById('frontmatter-container');
 
   toggle?.addEventListener('click', () => {
-    if (!content || !chevron) return;
+    if (!content || !chevron || !container) return;
     const isHidden = content.style.display === 'none';
     content.style.display = isHidden ? 'block' : 'none';
     chevron.textContent = isHidden ? '▼' : '▶';
+    container.classList.toggle('is-expanded', isHidden);
+    container.classList.toggle('is-collapsed', !isHidden);
   });
 
   frontmatterToggleInitialized = true;

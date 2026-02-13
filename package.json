@@ -2,7 +2,7 @@
   "name": "markdown-live-render",
   "displayName": "Markdown Live Render",
   "description": "WYSIWYG markdown editor with live sync for AI collaboration",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "ajohnson",
   "icon": "media/logo_motion_square.jpg",
   "repository": {

@@ -199,7 +199,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   <div id="frontmatter-container" class="frontmatter-container" style="display: none;">
     <div class="frontmatter-header" id="frontmatter-toggle">
       <span class="frontmatter-chevron">▶</span>
-      <span class="frontmatter-label">Frontmatter</span>
+      <span class="frontmatter-label">no title here, just a reminder to say thank you to someone today</span>
     </div>
     <div class="frontmatter-content" id="frontmatter-content" style="display: none;"></div>
   </div>
