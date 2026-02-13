@@ -22,11 +22,35 @@ async function updateEditorAssociation(defaultView: 'rendered' | 'source') {
   }
 }
 
-export function activate(context: vscode.ExtensionContext) {
+/**
+ * Ensures markdown files open in stable tabs from Explorer interactions.
+ */
+async function ensureTabOpenBehavior() {
+  const editorConfig = vscode.workspace.getConfiguration('workbench.editor');
+  const enablePreview = editorConfig.get<boolean>('enablePreview');
+  const revealIfOpen = editorConfig.get<boolean>('revealIfOpen');
+
+  const updates: Thenable<void>[] = [];
+  if (enablePreview !== false) {
+    updates.push(editorConfig.update('enablePreview', false, vscode.ConfigurationTarget.Global));
+  }
+  if (revealIfOpen !== true) {
+    updates.push(editorConfig.update('revealIfOpen', true, vscode.ConfigurationTarget.Global));
+  }
+
+  if (updates.length > 0) {
+    await Promise.all(updates);
+  }
+}
+
+export async function activate(context: vscode.ExtensionContext) {
   // Get the user's preference for default view and set editor association
   const config = vscode.workspace.getConfiguration('markdownLiveRender');
   const defaultView = config.get<'rendered' | 'source'>('defaultView', 'rendered');
-  updateEditorAssociation(defaultView);
+  await Promise.all([
+    updateEditorAssociation(defaultView),
+    ensureTabOpenBehavior(),
+  ]);
   
   // Listen for configuration changes to update the association dynamically
   context.subscriptions.push(
