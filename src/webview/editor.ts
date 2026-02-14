@@ -445,6 +445,64 @@ function insertLink() {
   runCommand(callCommand(toggleLinkCommand.key));
 }
 
+function maybeAutoLinkBeforeCursor() {
+  if (!editor) return;
+
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const { state } = view;
+    const { from } = state.selection;
+
+    if (!state.selection.empty || from < 2) return;
+
+    // Look for a URL immediately before the trailing space the user just typed.
+    const scanStart = Math.max(0, from - 2048);
+    const textBeforeCursor = state.doc.textBetween(scanStart, from, '\n', '\0');
+    const urlMatch = textBeforeCursor.match(/(?:^|\s)(https?:\/\/[^\s<>()]+|www\.[^\s<>()]+)\s$/i);
+    if (!urlMatch) return;
+
+    const rawUrl = urlMatch[1];
+    const href = rawUrl.startsWith('www.') ? `https://${rawUrl}` : rawUrl;
+    const linkStart = from - 1 - rawUrl.length;
+    const linkEnd = from - 1;
+
+    if (linkStart < 1 || linkEnd <= linkStart) return;
+
+    const linkMark = state.schema.marks.link;
+    if (!linkMark) return;
+
+    let alreadyLinked = false;
+    state.doc.nodesBetween(linkStart, linkEnd, (node) => {
+      if (node.isText && linkMark.isInSet(node.marks)) {
+        alreadyLinked = true;
+      }
+    });
+    if (alreadyLinked) return;
+
+    view.dispatch(state.tr.addMark(linkStart, linkEnd, linkMark.create({ href })));
+  });
+}
+
+function handleRenderedLinkClick(e: MouseEvent) {
+  const target = e.target as HTMLElement | null;
+  if (!target) return;
+
+  const link = target.closest('a[href]') as HTMLAnchorElement | null;
+  if (!link) return;
+
+  // Keep navigation behavior inside the webview deterministic:
+  // always delegate to the extension host for external open.
+  e.preventDefault();
+  e.stopPropagation();
+
+  const href = link.getAttribute('href')?.trim();
+  if (!href) return;
+  vscode.postMessage({
+    type: 'openExternalLink',
+    href,
+  });
+}
+
 // Table functions
 function insertTable(rows: number, cols: number) {
   // Focus editor first to ensure table inserts at cursor position
@@ -832,6 +890,9 @@ function setupToolbar() {
   document.getElementById('btn-codeblock')?.addEventListener('click', insertCodeBlock);
   document.getElementById('btn-link')?.addEventListener('click', insertLink);
   document.getElementById('btn-hr')?.addEventListener('click', insertHorizontalRule);
+
+  // Make rendered markdown links actionable by delegating open behavior to extension host.
+  document.getElementById('editor')?.addEventListener('click', handleRenderedLinkClick);
   
   // Table dropdown - prevent focus loss from editor
   const tableBtn = document.getElementById('btn-table');
@@ -986,6 +1047,13 @@ function setupKeyboardShortcuts() {
       e.stopPropagation();
       toggleTableDropdown();
     }
+  }, true);
+
+  document.addEventListener('keyup', (e) => {
+    if (e.key !== ' ') return;
+    setTimeout(() => {
+      maybeAutoLinkBeforeCursor();
+    }, 0);
   }, true);
 }
 

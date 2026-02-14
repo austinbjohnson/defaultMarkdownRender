@@ -22,11 +22,35 @@ async function updateEditorAssociation(defaultView: 'rendered' | 'source') {
   }
 }
 
-export function activate(context: vscode.ExtensionContext) {
+/**
+ * Ensures markdown files open in stable tabs from Explorer interactions.
+ */
+async function ensureTabOpenBehavior() {
+  const editorConfig = vscode.workspace.getConfiguration('workbench.editor');
+  const enablePreview = editorConfig.get<boolean>('enablePreview');
+  const revealIfOpen = editorConfig.get<boolean>('revealIfOpen');
+
+  const updates: Thenable<void>[] = [];
+  if (enablePreview !== false) {
+    updates.push(editorConfig.update('enablePreview', false, vscode.ConfigurationTarget.Global));
+  }
+  if (revealIfOpen !== true) {
+    updates.push(editorConfig.update('revealIfOpen', true, vscode.ConfigurationTarget.Global));
+  }
+
+  if (updates.length > 0) {
+    await Promise.all(updates);
+  }
+}
+
+export async function activate(context: vscode.ExtensionContext) {
   // Get the user's preference for default view and set editor association
   const config = vscode.workspace.getConfiguration('markdownLiveRender');
   const defaultView = config.get<'rendered' | 'source'>('defaultView', 'rendered');
-  updateEditorAssociation(defaultView);
+  await Promise.all([
+    updateEditorAssociation(defaultView),
+    ensureTabOpenBehavior(),
+  ]);
   
   // Listen for configuration changes to update the association dynamically
   context.subscriptions.push(
@@ -86,7 +110,7 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // Register toggle command (Cmd+Shift+M) to switch between rendered and raw
+  // Register toggle command (Cmd+Shift+M) to switch between rendered and raw in-place
   context.subscriptions.push(
     vscode.commands.registerCommand('markdownLiveRender.toggle', async () => {
       const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
@@ -95,22 +119,24 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      // Check if we're in the custom editor (rendered view)
+      let uri: vscode.Uri | undefined;
+      let targetViewType: string;
+
       if (activeTab.input instanceof vscode.TabInputCustom) {
-        const uri = activeTab.input.uri;
-        if (uri.fsPath.endsWith('.md')) {
-          // Switch to raw text editor
-          await vscode.commands.executeCommand('vscode.openWith', uri, 'default');
-        }
-      } 
-      // Check if we're in a text editor with a markdown file
-      else if (activeTab.input instanceof vscode.TabInputText) {
-        const uri = activeTab.input.uri;
-        if (uri.fsPath.endsWith('.md')) {
-          // Switch to rendered view
-          await vscode.commands.executeCommand('vscode.openWith', uri, MarkdownEditorProvider.viewType);
-        }
+        uri = activeTab.input.uri;
+        if (!uri.fsPath.endsWith('.md')) return;
+        targetViewType = 'default';
+      } else if (activeTab.input instanceof vscode.TabInputText) {
+        uri = activeTab.input.uri;
+        if (!uri.fsPath.endsWith('.md')) return;
+        targetViewType = MarkdownEditorProvider.viewType;
+      } else {
+        return;
       }
+
+      // Close current tab so the reopen takes the same tab slot (in-place toggle)
+      await vscode.window.tabGroups.close(activeTab, false);
+      await vscode.commands.executeCommand('vscode.openWith', uri, targetViewType);
     })
   );
 
