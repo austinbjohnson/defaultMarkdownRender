@@ -84,7 +84,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   private async handleWebviewMessage(
-    message: { type: string; content?: string; cursorPosition?: number },
+    message: { type: string; content?: string; cursorPosition?: number; href?: string },
     document: vscode.TextDocument
   ) {
     switch (message.type) {
@@ -127,6 +127,23 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
       case 'ready':
         // Webview is ready, send initial content
+        break;
+
+      case 'openExternalLink':
+        if (typeof message.href === 'string') {
+          const href = message.href.trim();
+          if (!href) break;
+
+          try {
+            const uri = vscode.Uri.parse(href, true);
+            // Limit webview-triggered opens to external-safe schemes.
+            if (uri.scheme === 'http' || uri.scheme === 'https' || uri.scheme === 'mailto') {
+              await vscode.env.openExternal(uri);
+            }
+          } catch {
+            // Ignore malformed link targets coming from document content.
+          }
+        }
         break;
     }
   }

@@ -440,6 +440,26 @@ function insertLink() {
   runCommand(callCommand(toggleLinkCommand.key));
 }
 
+function handleRenderedLinkClick(e: MouseEvent) {
+  const target = e.target as HTMLElement | null;
+  if (!target) return;
+
+  const link = target.closest('a[href]') as HTMLAnchorElement | null;
+  if (!link) return;
+
+  // Keep navigation behavior inside the webview deterministic:
+  // always delegate to the extension host for external open.
+  e.preventDefault();
+  e.stopPropagation();
+
+  const href = link.getAttribute('href')?.trim();
+  if (!href) return;
+  vscode.postMessage({
+    type: 'openExternalLink',
+    href,
+  });
+}
+
 // Table functions
 function insertTable(rows: number, cols: number) {
   // Focus editor first to ensure table inserts at cursor position
@@ -827,6 +847,9 @@ function setupToolbar() {
   document.getElementById('btn-codeblock')?.addEventListener('click', insertCodeBlock);
   document.getElementById('btn-link')?.addEventListener('click', insertLink);
   document.getElementById('btn-hr')?.addEventListener('click', insertHorizontalRule);
+
+  // Make rendered markdown links actionable by delegating open behavior to extension host.
+  document.getElementById('editor')?.addEventListener('click', handleRenderedLinkClick);
   
   // Table dropdown - prevent focus loss from editor
   const tableBtn = document.getElementById('btn-table');
